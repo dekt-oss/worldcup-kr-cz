@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>한국 vs 체코 · 스코어 맞히기 내기</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg0:#07120E; --bg1:#0E1F19;
+    --kr:#E23744; --kr-soft:rgba(226,55,68,.16);
+    --cz:#3B82C4; --cz-soft:rgba(59,130,196,.16);
+    --gold:#F2C14E; --gold-soft:rgba(242,193,78,.14);
+    --cream:#F4F1E8; --muted:rgba(244,241,232,.52);
+    --line:rgba(244,241,232,.12);
+    --tile:#0A1813;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    font-family:'Pretendard',system-ui,sans-serif;
+    color:var(--cream);
+    background:
+      radial-gradient(120% 70% at 50% -10%, rgba(242,193,78,.10), transparent 55%),
+      radial-gradient(90% 60% at 50% 0%, rgba(59,130,196,.08), transparent 60%),
+      linear-gradient(180deg,var(--bg1),var(--bg0));
+    background-attachment:fixed;
+    min-height:100vh;
+    line-height:1.5;
+    padding:28px 18px 56px;
+  }
+  .wrap{max-width:640px;margin:0 auto}
+
+  /* ── header ── */
+  .eyebrow{
+    font-size:12px;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--gold);font-weight:700;text-align:center;margin-bottom:14px;
+  }
+  .eyebrow span{opacity:.5;color:var(--cream)}
+
+  /* ── scoreboard ── */
+  .board{
+    position:relative;
+    border:1px solid var(--line);
+    border-radius:22px;
+    background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0));
+    padding:26px 18px 22px;
+    box-shadow:0 24px 60px -28px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .matchup{
+    display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;
+  }
+  .team{text-align:center}
+  .team .flag{font-size:34px;line-height:1;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
+  .team .name{
+    font-weight:900;font-size:19px;margin-top:8px;letter-spacing:-.01em;
+  }
+  .team .badge{
+    display:inline-block;margin-top:6px;font-size:11px;font-weight:700;
+    padding:3px 9px;border-radius:999px;letter-spacing:.02em;
+  }
+  .team.kr .badge{background:var(--kr-soft);color:#FF8b94}
+  .team.cz .badge{background:var(--cz-soft);color:#9CC6EB}
+
+  .tiles{display:flex;align-items:center;gap:8px;justify-content:center}
+  .tile{
+    width:62px;height:84px;border-radius:14px;background:var(--tile);
+    border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Anton',sans-serif;font-size:52px;line-height:1;
+    color:var(--cream);
+    box-shadow:inset 0 2px 8px rgba(0,0,0,.55), inset 0 -1px 0 rgba(255,255,255,.04);
+    text-align:center;
+    transition:border-color .25s, box-shadow .25s, color .25s, transform .25s;
+  }
+  input.tile{
+    -moz-appearance:textfield;appearance:textfield;outline:none;padding:0;
+  }
+  input.tile::-webkit-outer-spin-button,input.tile::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input.tile:focus{border-color:var(--gold);box-shadow:inset 0 2px 8px rgba(0,0,0,.55), 0 0 0 3px var(--gold-soft)}
+  input.tile.kr-on{color:#FF6B74}
+  input.tile.cz-on{color:#7CB6E8}
+  .colon{font-family:'Anton',sans-serif;font-size:40px;color:var(--muted);padding-bottom:6px}
+  .board.locked .tile{box-shadow:inset 0 2px 10px rgba(0,0,0,.6), 0 0 22px -6px var(--gold-soft)}
+
+  .outcome{
+    text-align:center;margin-top:14px;min-height:20px;
+    font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--muted);
+  }
+
+  /* ── prize strip ── */
+  .prize{
+    margin-top:18px;display:flex;align-items:center;justify-content:center;gap:8px;
+    border-top:1px dashed var(--line);padding-top:16px;
+  }
+  .prize .amt{font-family:'Anton',sans-serif;font-size:30px;color:var(--gold);letter-spacing:.02em}
+  .prize .lbl{font-size:13px;color:var(--muted);font-weight:600}
+
+  /* ── controls ── */
+  .controls{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+  .btn{
+    width:100%;border:none;border-radius:14px;padding:15px;cursor:pointer;
+    font-family:inherit;font-weight:800;font-size:15px;letter-spacing:.01em;
+    transition:transform .1s, filter .2s, background .2s;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--gold);color:#1a1305}
+  .btn-primary:hover{filter:brightness(1.06)}
+  .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:700;font-size:13px;padding:11px}
+  .btn-ghost:hover{color:var(--cream);border-color:rgba(244,241,232,.3)}
+  .err{color:#FF8b94;font-size:13px;text-align:center;font-weight:600;min-height:0}
+
+  /* ── result banner ── */
+  .banner{
+    margin-top:16px;border-radius:16px;padding:18px;text-align:center;
+    border:1px solid var(--line);display:none;
+  }
+  .banner.show{display:block;animation:rise .45s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .banner.win{background:var(--gold-soft);border-color:rgba(242,193,78,.45);box-shadow:0 0 40px -14px var(--gold-soft)}
+  .banner.roll{background:rgba(255,255,255,.03)}
+  .banner .b-top{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .banner.win .b-top{color:var(--gold)}
+  .banner .b-main{font-weight:900;font-size:22px;margin-top:6px;letter-spacing:-.01em}
+  .banner .b-sub{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.55}
+
+  /* ── section heads ── */
+  .sec{margin-top:34px}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+  .sec-head h2{font-size:16px;font-weight:800;letter-spacing:-.01em}
+  .sec-head .count{font-size:12px;color:var(--muted);font-weight:600}
+
+  /* ── prediction cards ── */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .pred{
+    border:1px solid var(--line);border-radius:16px;padding:14px;
+    background:linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0));
+    transition:opacity .3s, border-color .3s, box-shadow .3s, transform .3s;
+  }
+  .pred .p-name{font-weight:800;font-size:15px;display:flex;align-items:center;gap:6px}
+  .pred .p-score{font-family:'Anton',sans-serif;font-size:34px;margin-top:8px;letter-spacing:.04em}
+  .pred .p-score .s-kr{color:#FF6B74}.pred .p-score .s-cz{color:#7CB6E8}.pred .p-score .s-col{color:var(--muted);margin:0 4px}
+  .pred .p-tag{font-size:11px;font-weight:700;color:var(--muted);margin-top:4px;letter-spacing:.02em}
+  .pred .p-result{font-size:11px;font-weight:800;margin-top:8px;min-height:14px;letter-spacing:.03em}
+  .pred.win{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold), 0 0 34px -10px var(--gold-soft);transform:translateY(-2px)}
+  .pred.win .p-result{color:var(--gold)}
+  .pred.miss{opacity:.5}
+  .pred.miss .p-result{color:var(--muted)}
+
+  /* ── rules ── */
+  .rules{border:1px solid var(--line);border-radius:16px;padding:18px;background:rgba(255,255,255,.02)}
+  .rules li{list-style:none;display:flex;gap:11px;padding:8px 0;font-size:14px;color:var(--cream)}
+  .rules li+li{border-top:1px solid var(--line)}
+  .rules .k{flex:0 0 auto;width:22px;height:22px;border-radius:7px;background:var(--gold-soft);color:var(--gold);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .rules .v b{color:var(--gold);font-weight:800}
+
+  footer{text-align:center;margin-top:30px;font-size:12px;color:var(--muted);line-height:1.7}
+  footer .live{display:inline-flex;align-items:center;gap:6px}
+  footer .dot{width:7px;height:7px;border-radius:50%;background:#56d27a;box-shadow:0 0 8px #56d27a;animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  @media (max-width:380px){
+    .tile{width:54px;height:74px;font-size:44px}
+    .team .name{font-size:17px}
+    .grid{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">월드컵 <span>·</span> 스코어 맞히기 내기</div>
+
+  <!-- SCOREBOARD -->
+  <div class="board" id="board">
+    <div class="matchup">
+      <div class="team kr">
+        <div class="flag">🇰🇷</div>
+        <div class="name">대한민국</div>
+        <div class="badge">HOME</div>
+      </div>
+      <div class="tiles">
+        <input class="tile kr-on" id="inKr" type="number" min="0" max="99" inputmode="numeric" placeholder="–" aria-label="한국 득점">
+        <div class="colon">:</div>
+        <input class="tile cz-on" id="inCz" type="number" min="0" max="99" inputmode="numeric" placeholder="–" aria-label="체코 득점">
+      </div>
+      <div class="team cz">
+        <div class="flag">🇨🇿</div>
+        <div class="name">체코</div>
+        <div class="badge">AWAY</div>
+      </div>
+    </div>
+
+    <div class="outcome" id="outcome">경기 결과를 입력하면 우승자가 가려집니다</div>
+
+    <div class="prize">
+      <div class="amt">50,000원</div>
+      <div class="lbl">정확히 맞히면 독식</div>
+    </div>
+
+    <div class="controls">
+      <div class="err" id="err"></div>
+      <button class="btn btn-primary" id="confirmBtn">결과 확정 · 우승자 판정</button>
+      <button class="btn btn-ghost" id="resetBtn" style="display:none">결과 다시 입력</button>
+    </div>
+
+    <div class="banner" id="banner">
+      <div class="b-top" id="bTop"></div>
+      <div class="b-main" id="bMain"></div>
+      <div class="b-sub" id="bSub"></div>
+    </div>
+  </div>
+
+  <!-- PREDICTIONS -->
+  <div class="sec">
+    <div class="sec-head">
+      <h2>예측 현황</h2>
+      <div class="count">참가자 5명 · 제출 마감</div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <!-- RULES -->
+  <div class="sec">
+    <div class="sec-head"><h2>규칙</h2></div>
+    <ul class="rules">
+      <li><span class="k">₩</span><span class="v">한 사람당 <b>1만원</b>씩, 상금 풀 <b>5만원</b>.</span></li>
+      <li><span class="k">①</span><span class="v">한국:체코 <b>정확한 스코어</b>를 맞힌 사람이 전액 독식.</span></li>
+      <li><span class="k">②</span><span class="v">아무도 못 맞히면 상금은 <b>다음 경기로 이월</b>.</span></li>
+      <li><span class="k">③</span><span class="v">두 명 이상 동시 적중 시 상금 <b>균등 분배</b>.</span></li>
+    </ul>
+  </div>
+
+  <footer>
+    <div class="live"><span class="dot"></span> 결과는 링크를 연 모두에게 실시간 공유됩니다</div>
+    <div style="margin-top:6px">예측 마감 · 5/5 제출 완료</div>
+  </footer>
+
+</div>
+
+<script>
+  const PARTICIPANTS = [
+    { name:'정태원', kr:1, cz:2 },
+    { name:'임준혁', kr:0, cz:1 },
+    { name:'전민석', kr:0, cz:2 },
+    { name:'전호상', kr:1, cz:0 },
+    { name:'안준홍', kr:2, cz:0 },
+  ];
+  const PRIZE = 50000;
+  const KEY = 'wc-kr-cz-result';
+
+  const won = (kr,cz)=> kr>cz ? '한국 승' : kr<cz ? '체코 승' : '무승부';
+  const fmt = n => n.toLocaleString('ko-KR');
+
+  // build cards
+  const grid = document.getElementById('grid');
+  PARTICIPANTS.forEach((p,i)=>{
+    const el = document.createElement('div');
+    el.className='pred'; el.dataset.idx=i;
+    el.innerHTML =
+      `<div class="p-name">${p.name}</div>`+
+      `<div class="p-score"><span class="s-kr">${p.kr}</span><span class="s-col">:</span><span class="s-cz">${p.cz}</span></div>`+
+      `<div class="p-tag">${won(p.kr,p.cz)} 예측</div>`+
+      `<div class="p-result"></div>`;
+    grid.appendChild(el);
+  });
+
+  const inKr=document.getElementById('inKr'), inCz=document.getElementById('inCz');
+  const board=document.getElementById('board'), outcome=document.getElementById('outcome');
+  const confirmBtn=document.getElementById('confirmBtn'), resetBtn=document.getElementById('resetBtn');
+  const err=document.getElementById('err');
+  const banner=document.getElementById('banner'), bTop=document.getElementById('bTop'), bMain=document.getElementById('bMain'), bSub=document.getElementById('bSub');
+
+  function render(kr,cz){
+    const cards=[...grid.children];
+    const winners = PARTICIPANTS.map((p,i)=>({p,i})).filter(o=>o.p.kr===kr&&o.p.cz===cz);
+    const winIdx = new Set(winners.map(o=>o.i));
+
+    // scoreboard locked state
+    inKr.value=kr; inCz.value=cz; inKr.readOnly=true; inCz.readOnly=true;
+    board.classList.add('locked');
+    outcome.textContent = `최종 결과 · ${won(kr,cz)}`;
+
+    // cards
+    cards.forEach((el,i)=>{
+      const p=PARTICIPANTS[i];
+      const r=el.querySelector('.p-result');
+      el.classList.remove('win','miss');
+      if(winIdx.has(i)){ el.classList.add('win'); r.textContent='🎯 적중'; }
+      else{
+        el.classList.add('miss');
+        const gap=Math.abs(p.kr-kr)+Math.abs(p.cz-cz);
+        r.textContent=`오차 ${gap}골`;
+      }
+    });
+
+    // banner
+    banner.classList.remove('win','roll');
+    if(winners.length>0){
+      banner.classList.add('win','show');
+      const names=winners.map(o=>o.p.name).join(' · ');
+      bTop.textContent='WINNER';
+      if(winners.length===1){
+        bMain.textContent=`🏆 ${names} 적중!`;
+        bSub.textContent=`상금 ${fmt(PRIZE)}원 단독 획득`;
+      }else{
+        bMain.textContent=`🏆 공동 우승 · ${names}`;
+        bSub.textContent=`상금 ${fmt(PRIZE)}원을 ${winners.length}명이 균등 분배 (1인당 ${fmt(Math.floor(PRIZE/winners.length))}원)`;
+      }
+    }else{
+      banner.classList.add('roll','show');
+      bTop.textContent='이월';
+      bMain.textContent='이번 경기 적중자 없음';
+      bSub.textContent=`상금 ${fmt(PRIZE)}원은 다음 경기로 이월됩니다`;
+    }
+
+    confirmBtn.style.display='none';
+    resetBtn.style.display='block';
+  }
+
+  function clearState(){
+    inKr.value=''; inCz.value=''; inKr.readOnly=false; inCz.readOnly=false;
+    board.classList.remove('locked');
+    outcome.textContent='경기 결과를 입력하면 우승자가 가려집니다';
+    banner.classList.remove('show','win','roll');
+    [...grid.children].forEach(el=>{ el.classList.remove('win','miss'); el.querySelector('.p-result').textContent=''; });
+    confirmBtn.style.display='block'; resetBtn.style.display='none'; err.textContent='';
+  }
+
+  // storage (shared across everyone who opens the link)
+  async function save(kr,cz){
+    try{ await window.storage.set(KEY, JSON.stringify({kr,cz,ts:Date.now()}), true); }catch(e){}
+  }
+  async function load(){
+    try{
+      const res = await window.storage.get(KEY, true);
+      if(res && res.value){ const d=JSON.parse(res.value); render(d.kr,d.cz); }
+    }catch(e){ /* no result yet */ }
+  }
+  async function wipe(){
+    try{ await window.storage.delete(KEY, true); }catch(e){}
+  }
+
+  confirmBtn.addEventListener('click', async ()=>{
+    const kr=parseInt(inKr.value,10), cz=parseInt(inCz.value,10);
+    if(inKr.value===''||inCz.value===''||isNaN(kr)||isNaN(cz)||kr<0||cz<0){
+      err.textContent='두 팀의 점수를 모두 입력해 주세요'; return;
+    }
+    err.textContent='';
+    render(kr,cz);
+    await save(kr,cz);
+  });
+
+  resetBtn.addEventListener('click', async ()=>{
+    clearState(); await wipe();
+  });
+
+  load();
+</script>
+</body>
+</html>
