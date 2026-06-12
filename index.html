@@ -306,10 +306,10 @@ const FIREBASE_CONFIG = {
    home/away 순서는 실제 경기 기준. krHome=true면 한국이 홈.
    ============================================================ */
 const MATCHES = [
-  { id:'kr-cz', no:'1차전', krHome:true, wcGroup:'A', wcMatchday:1,
+  { id:'kr-cz', no:'1차전', krHome:true, wcGroup:'A', wcMatchday:1, wcHomeId:3, wcAwayId:4,
     home:{flag:'🇰🇷',name:'대한민국',kr:true}, away:{flag:'🇨🇿',name:'체코',kr:false},
     koUTC:'2026-06-12T02:00:00Z', when:'6/12(금) 11:00', venue:'과달라하라 · Estadio Akron',
-    prize:50000, seed:{h:2,a:1,final:true,scorers:{home:['황인범','오현규'],away:[]}},
+    prize:50000, seed:{h:2,a:1,final:true,scorers:{home:['황인범','오현규'],away:['L. Krejčí']}},
     seedBets:[
       {name:'정태원',h:1,a:2},
       {name:'임준혁',h:0,a:1},
@@ -317,11 +317,11 @@ const MATCHES = [
       {name:'전호상',h:1,a:0},
       {name:'안준홍',h:2,a:0},
     ] },
-  { id:'mx-kr', no:'2차전', krHome:false, wcGroup:'A', wcMatchday:2,
+  { id:'mx-kr', no:'2차전', krHome:false, wcGroup:'A', wcMatchday:2, wcHomeId:1, wcAwayId:3,
     home:{flag:'🇲🇽',name:'멕시코',kr:false}, away:{flag:'🇰🇷',name:'대한민국',kr:true},
     koUTC:'2026-06-19T01:00:00Z', when:'6/19(금) 10:00', venue:'과달라하라 · Estadio Akron',
     prize:50000, seed:null },
-  { id:'za-kr', no:'3차전', krHome:false, wcGroup:'A', wcMatchday:3,
+  { id:'za-kr', no:'3차전', krHome:false, wcGroup:'A', wcMatchday:3, wcHomeId:2, wcAwayId:3,
     home:{flag:'🇿🇦',name:'남아공',kr:false}, away:{flag:'🇰🇷',name:'대한민국',kr:true},
     koUTC:'2026-06-25T01:00:00Z', when:'6/25(목) 10:00', venue:'몬테레이 · Estadio BBVA',
     prize:50000, seed:null },
@@ -769,13 +769,18 @@ const codeOfName = n => {
   if(/south africa|남아공|rsa/.test(n)) return 'za';
   return '';
 };
-/* 득점자 필드 파싱: 'null'/빈값 → [], 그 외 콤마/구분자로 분리 */
+/* 득점자 필드 파싱: worldcup26.ir은 PG 배열 리터럴 형식.
+   예: {"I.B. Hwang 67'","H.G. Oh 80'"} / {“J. Quiñones 9'”,”R. Jiménez 67'”} / null
+   → 중괄호 제거 후 콤마 분리, 양끝의 큰따옴표(일반/둥근)만 제거(분 표기 ' 는 보존). */
 function parseScorers(v){
   if(v==null) return [];
   if(Array.isArray(v)) return v.map(x=>(''+(x&&x.name||x)).trim()).filter(Boolean);
-  const s=(''+v).trim();
-  if(!s || /^null$/i.test(s)) return [];
-  return s.split(/[,;،\n]/).map(x=>x.trim()).filter(Boolean);
+  let s=(''+v).trim();
+  if(!s || /^null$/i.test(s) || s==='{}' || s==='""') return [];
+  s=s.replace(/^\{|\}$/g,'');                       // PG 배열 중괄호 제거
+  return s.split(',')
+    .map(x=>x.trim().replace(/^[\s"“”„]+|[\s"“”„]+$/g,'').trim())
+    .filter(Boolean);
 }
 function setAutoUpd(txt){
   const el=document.getElementById('autoUpd'); if(el) el.innerHTML=txt;
@@ -827,21 +832,17 @@ async function fetchResults(){
     MATCHES.forEach(m=>{
       if(!isLocked(m)) return;                     // 킥오프 전이면 결과 안 받음(가짜값 방지)
       const ex=resultOf(m); if(ex && ex.final) return; // 이미 확정(시드/수동/확정)된 경기 보호
-      // 조 + matchday 로 경기 매칭
-      const g=games.find(x=> String(x.group||x.group_name||'').toUpperCase()===m.wcGroup
-        && +(x.matchday||x.match_day||x.round)===m.wcMatchday );
+      // 팀 ID 쌍으로 정확히 매칭 (같은 조·matchday에 경기가 여러 개라 ID로 식별)
+      const g=games.find(x=>{
+        const H=+x.home_team_id, A=+x.away_team_id;
+        return (H===m.wcHomeId&&A===m.wcAwayId)||(H===m.wcAwayId&&A===m.wcHomeId);
+      });
       if(!g) return;
       const hs=g.home_score, as=g.away_score;
       if(hs==null||as==null||hs===''||as==='') return;
       let h=+hs, a=+as; if(isNaN(h)||isNaN(a)) return;
       let hsc=parseScorers(g.home_scorers), asc=parseScorers(g.away_scorers);
-      // 방향 정렬: API home 팀이 우리 away면 스왑
-      const apiHomeName = teams ? teams[g.home_team_id] : '';
-      const apiHomeCode = codeOfName(apiHomeName);
-      const ourHomeCode = codeOfName(m.home.name);
-      if(apiHomeCode && ourHomeCode && apiHomeCode!==ourHomeCode){
-        [h,a]=[a,h]; [hsc,asc]=[asc,hsc];
-      }
+      if(+g.home_team_id!==m.wcHomeId){ [h,a]=[a,h]; [hsc,asc]=[asc,hsc]; } // API 홈이 우리 원정이면 스왑
       const finished = /^(true|1|ft|finished|ended|full|final)$/i.test(''+(g.finished||g.time_elapsed||''))
         || g.finished===true;
       const scorers=(hsc.length||asc.length)?{home:hsc,away:asc}:null;
