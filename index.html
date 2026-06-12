@@ -164,17 +164,21 @@
   .sec-head h2{font-size:15px;font-weight:800}
   .sec-head .count{font-size:12px;color:var(--muted);font-weight:600}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .pred{border:1px solid var(--line);border-radius:16px;padding:13px;background:linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0))}
+  .pred{border:1px solid var(--line);border-radius:16px;padding:14px;background:linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0));
+    display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .pred .p-left{min-width:0;flex:1}
   .pred .p-name{font-weight:800;font-size:14px;display:flex;align-items:center;gap:6px}
   .pred .p-name .me-tag{font-size:10px;background:var(--gold-soft);color:var(--gold);padding:1px 6px;border-radius:999px;font-weight:800}
   .pred .p-score{font-family:'Anton',sans-serif;font-size:30px;margin-top:6px;letter-spacing:.04em}
   .pred .p-score .s-kr{color:#FF6B74}.pred .p-score .s-cz{color:#7CB6E8}.pred .p-score .s-col{color:var(--muted);margin:0 4px}
   .pred .p-pick{font-size:11px;font-weight:600;margin-top:4px;color:var(--muted)}
-  .pred .p-result{font-size:14px;font-weight:900;margin-top:8px;min-height:16px;letter-spacing:.03em;color:var(--muted)}
+  .pred .p-verdict{flex:0 0 auto;text-align:center;font-weight:900;letter-spacing:.02em;line-height:1.15;color:var(--muted)}
+  .pred .p-verdict.big{font-size:24px}
+  .pred .p-verdict.small{font-size:12px;font-weight:700}
   .pred.win{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold), 0 0 30px -12px var(--gold-soft)}
-  .pred.win .p-result{color:var(--gold)}
-  .pred.miss{opacity:.82}
-  .pred.miss .p-result{color:#FF5C68}
+  .pred.win .p-verdict{color:var(--gold)}
+  .pred.miss{opacity:.9}
+  .pred.miss .p-verdict{color:#FF5C68}
   .empty{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;padding:18px;border:1px dashed var(--line);border-radius:14px}
 
   /* banner */
@@ -235,6 +239,7 @@
   <div class="me-note">베팅 저장·수정·삭제는 <b>본인 휴대폰 번호 뒷 4자리</b> 인증이 필요합니다.</div>
 
   <div class="sync" id="sync"><span class="pill"><span class="dot"></span><span id="syncTxt">로컬 저장 모드</span></span></div>
+  <div class="me-note" id="autoUpd" style="margin-top:-4px">경기 결과 자동 갱신 대기 중…</div>
 
   <!-- tabs -->
   <div class="tabs" id="tabs"></div>
@@ -588,17 +593,19 @@ function renderPredictions(m){
     cards=`<div class="empty">아직 베팅한 사람이 없습니다${isLocked(m)?'':' · 첫 베팅을 남겨보세요'}</div>`;
   }else{
     cards=entries.map(([k,p])=>{
-      let cls='', rtxt='';
+      let cls='', vtxt='', vsize='small';
       if(res && res.final){
-        if(+p.h===res.h && +p.a===res.a){ cls='win'; rtxt='🎯 적중'; }
-        else{ cls='miss'; rtxt='낙첨'; }
-      }else{ rtxt = isLocked(m)?'결과 대기':'예측 완료'; }
+        if(+p.h===res.h && +p.a===res.a){ cls='win'; vtxt='🎯<br>적중'; vsize='big'; }
+        else{ cls='miss'; vtxt='낙첨'; vsize='big'; }
+      }else{ vtxt = isLocked(m)?'결과<br>대기':'예측<br>완료'; }
       const meTag = k===uk ? '<span class="me-tag">나</span>':'';
       return `<div class="pred ${cls}">
-        <div class="p-name">${esc(p.name||k)} ${meTag}</div>
-        <div class="p-score"><span class="${m.home.kr?'s-kr':'s-cz'}">${p.h}</span><span class="s-col">:</span><span class="${m.away.kr?'s-kr':'s-cz'}">${p.a}</span></div>
-        <div class="p-pick">${esc(won(p.h,p.a,m))} 예측</div>
-        <div class="p-result">${rtxt}</div>
+        <div class="p-left">
+          <div class="p-name">${esc(p.name||k)} ${meTag}</div>
+          <div class="p-score"><span class="${m.home.kr?'s-kr':'s-cz'}">${p.h}</span><span class="s-col">:</span><span class="${m.away.kr?'s-kr':'s-cz'}">${p.a}</span></div>
+          <div class="p-pick">${esc(won(p.h,p.a,m))} 예측</div>
+        </div>
+        <div class="p-verdict ${vsize}">${vtxt}</div>
       </div>`;
     }).join('');
   }
@@ -679,14 +686,20 @@ function mapGame(g){
   const final = /(ft|finished|ended|full|final|complete)/.test(st);
   return { hn, an, hs, as, final };
 }
+function setAutoUpd(txt){
+  const el=document.getElementById('autoUpd'); if(el) el.innerHTML=txt;
+}
+const hhmm=()=>new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+
 async function fetchResults(){
   if(!RESULT_API) return;
   try{
     const res=await fetch(RESULT_API,{cache:'no-store'});
-    if(!res.ok) return;
+    if(!res.ok){ setAutoUpd(`자동 갱신: 결과 소스 응답 없음 · <b>수동 입력</b>으로 대체 (${hhmm()})`); return; }
     let data=await res.json();
     const games=Array.isArray(data)?data:(data.games||data.data||data.matches||[]);
-    if(!Array.isArray(games)||!games.length) return;
+    if(!Array.isArray(games)||!games.length){ setAutoUpd(`자동 갱신: 5분마다 확인 중 · 마지막 ${hhmm()}`); return; }
+    setAutoUpd(`경기 결과 자동 갱신 중 · 5분마다 · 마지막 <b>${hhmm()}</b>`);
     MATCHES.forEach(m=>{
       const wantH = m.home.kr?'kr':(m.id==='mx-kr'?'mx':m.id==='kr-cz'?(m.home.name==='체코'?'cz':'kr'):'za');
       // 팀 코드 결정
@@ -707,7 +720,9 @@ async function fetchResults(){
         }
       }
     });
-  }catch(e){ /* CORS/네트워크 실패 → seed·수동 입력으로 동작 */ }
+  }catch(e){ /* CORS/네트워크 실패 → seed·수동 입력으로 동작 */
+    setAutoUpd(`자동 갱신 불가(차단/오류) · <b>결과는 수동 입력</b>으로 표시됩니다 (${hhmm()})`);
+  }
 }
 
 /* ============================================================
@@ -739,8 +754,8 @@ async function fetchResults(){
   initBackend();
   renderAll();
   fetchResults();
-  setInterval(fetchResults, 60000); // 1분마다 자동 갱신
-  setInterval(renderAll, 60000);    // 잠금/카운트다운 갱신
+  setInterval(fetchResults, 300000); // 5분마다 경기 결과 자동 갱신
+  setInterval(renderAll, 60000);     // 잠금/카운트다운 갱신
 })();
 </script>
 </body>
