@@ -115,6 +115,8 @@
   .colon{font-family:'Anton',sans-serif;font-size:40px;color:var(--muted);padding-bottom:6px}
   .outcome{text-align:center;margin-top:14px;min-height:20px;font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--muted)}
   .outcome.final{color:var(--gold)}
+  .scorers{text-align:center;font-size:12px;color:var(--cream);margin-top:7px;font-weight:600;letter-spacing:.02em}
+  .scorers span{color:var(--muted);font-weight:500}
 
   /* my-bet box */
   .mybet{margin-top:18px;border-top:1px dashed var(--line);padding-top:16px}
@@ -273,7 +275,7 @@ const MATCHES = [
   { id:'kr-cz', no:'1차전', krHome:true,
     home:{flag:'🇰🇷',name:'대한민국',kr:true}, away:{flag:'🇨🇿',name:'체코',kr:false},
     koUTC:'2026-06-12T02:00:00Z', when:'6/12(금) 11:00', venue:'과달라하라 · Estadio Akron',
-    prize:50000, seed:{h:2,a:1,final:true} },
+    prize:50000, seed:{h:2,a:1,final:true,scorers:{home:['황인범','오현규'],away:[]}} },
   { id:'mx-kr', no:'2차전', krHome:false,
     home:{flag:'🇲🇽',name:'멕시코',kr:false}, away:{flag:'🇰🇷',name:'대한민국',kr:true},
     koUTC:'2026-06-19T01:00:00Z', when:'6/19(금) 10:00', venue:'과달라하라 · Estadio Akron',
@@ -346,10 +348,29 @@ function clearResult(matchId){
 
 /* 결과 우선순위: 수동/공유 override > seed.  (API는 fetch 후 results로 주입) */
 function resultOf(m){
+  const seedScorers = (m.seed && m.seed.scorers) || null;
   const r = STATE.results[m.id];
-  if(r && r.h!=null && r.a!=null) return { h:+r.h, a:+r.a, final:!!r.final };
-  if(m.seed) return { h:m.seed.h, a:m.seed.a, final:!!m.seed.final };
+  if(r && r.h!=null && r.a!=null) return { h:+r.h, a:+r.a, final:!!r.final, scorers:seedScorers };
+  if(m.seed) return { h:m.seed.h, a:m.seed.a, final:!!m.seed.final, scorers:seedScorers };
   return null;
+}
+/* 적중자 목록 (결과 확정 전이면 null) */
+function winnersOf(m){
+  const res=resultOf(m); if(!(res&&res.final)) return null;
+  const bets=STATE.bets[m.id]||{};
+  return Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
+}
+/* 실제 상금 풀 = 이 경기 상금 + 앞 경기들에서 적중자 없이 끝난 상금 이월 누적.
+   중간에 적중자가 나오면 그 사람이 가져가므로 이월은 0으로 리셋. */
+function potOf(m){
+  const idx=MATCHES.indexOf(m); let carry=0;
+  for(let i=0;i<idx;i++){
+    const w=winnersOf(MATCHES[i]);
+    if(w===null) continue;        // 아직 결과 미확정 → 이월 미정
+    if(w.length===0) carry+=MATCHES[i].prize;  // 미적중 → 이월
+    else carry=0;                 // 적중자가 가져감 → 이월 소멸
+  }
+  return m.prize+carry;
 }
 function isLocked(m){ return Date.now() >= new Date(m.koUTC).getTime(); }
 function dday(m){
@@ -422,7 +443,9 @@ function renderBoard(m){
     </div>
     <div class="outcome ${res&&res.final?'final':''}">${
       res ? (res.final?'최종 결과 · ':'진행중 · ')+won(res.h,res.a,m) : '경기 예정 · '+(dday(m)||'곧 시작')
-    }</div>`;
+    }</div>
+    ${res&&res.scorers&&res.scorers.home&&res.scorers.home.length
+      ? `<div class="scorers">⚽ ${res.scorers.home.map(esc).join(' · ')} <span>(${esc(m.home.kr?m.home.name:m.away.name)})</span></div>` : ''}`;
 
   // my bet area
   const bet=document.createElement('div'); bet.className='mybet';
@@ -444,8 +467,9 @@ function renderBoard(m){
   wrap.appendChild(bet);
 
   // prize + banner
+  const pot=potOf(m); const carry=pot-m.prize;
   const prize=document.createElement('div'); prize.className='prize';
-  prize.innerHTML=`<div class="amt">${fmt(m.prize)}원</div><div class="lbl">정확히 맞히면 독식</div>`;
+  prize.innerHTML=`<div class="amt">${fmt(pot)}원</div><div class="lbl">${carry>0?`기본 ${fmt(m.prize)} + 이월 ${fmt(carry)}원`:'정확히 맞히면 독식'}</div>`;
   wrap.appendChild(prize);
 
   if(res && res.final) wrap.appendChild(renderBanner(m,res));
@@ -471,17 +495,20 @@ function renderBoard(m){
 }
 
 function renderBanner(m,res){
+  const pot=potOf(m);
   const bets=STATE.bets[m.id]||{};
+  const total=Object.keys(bets).length;
   const winners=Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
+  const idx=MATCHES.indexOf(m); const next=MATCHES[idx+1];
   const b=document.createElement('div'); b.className='banner show '+(winners.length?'win':'roll');
   if(winners.length){
     const names=winners.map(w=>esc(w.name)).join(' · ');
-    const per=Math.floor(m.prize/winners.length);
+    const per=Math.floor(pot/winners.length);
     b.innerHTML = winners.length===1
-      ? `<div class="b-top">WINNER</div><div class="b-main">🏆 ${names} 적중!</div><div class="b-sub">상금 ${fmt(m.prize)}원 단독 획득</div>`
-      : `<div class="b-top">WINNER</div><div class="b-main">🏆 공동 우승 · ${names}</div><div class="b-sub">${fmt(m.prize)}원을 ${winners.length}명이 분배 (1인 ${fmt(per)}원)</div>`;
+      ? `<div class="b-top">WINNER</div><div class="b-main">🏆 ${names} 적중!</div><div class="b-sub">정답 ${res.h}:${res.a} · 상금 ${fmt(pot)}원 단독 획득</div>`
+      : `<div class="b-top">WINNER</div><div class="b-main">🏆 공동 우승 · ${names}</div><div class="b-sub">정답 ${res.h}:${res.a} · ${fmt(pot)}원을 ${winners.length}명이 분배 (1인 ${fmt(per)}원)</div>`;
   }else{
-    b.innerHTML = `<div class="b-top">이월</div><div class="b-main">적중자 없음</div><div class="b-sub">상금 ${fmt(m.prize)}원은 다음 경기로 이월됩니다</div>`;
+    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 상금 ${fmt(pot)}원이 ${next?esc(next.no)+'으로':'다음 경기로'} 이월됩니다</div>`;
   }
   return b;
 }
@@ -510,7 +537,12 @@ function renderPredictions(m){
       </div>`;
     }).join('');
   }
-  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">${entries.length}명 참여${isLocked(m)?' · 마감':''}</div></div><div class="grid">${cards}</div>`;
+  let summary='';
+  if(res && res.final){
+    const wc=entries.filter(([k,p])=>+p.h===res.h && +p.a===res.a).length;
+    summary = wc>0 ? ` · 🎯 적중 ${wc}명` : (entries.length?' · 적중자 없음':'');
+  }
+  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">${entries.length}명 참여${isLocked(m)?' · 마감':''}${summary}</div></div><div class="grid">${cards}</div>`;
   return sec;
 }
 
