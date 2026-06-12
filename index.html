@@ -42,19 +42,21 @@
 
   /* identity bar */
   .me{
-    display:flex;align-items:center;gap:8px;margin-bottom:16px;
+    display:flex;align-items:center;gap:8px;margin-bottom:8px;
     border:1px solid var(--line);border-radius:14px;padding:10px 12px;
-    background:rgba(255,255,255,.025);
+    background:rgba(255,255,255,.025);flex-wrap:wrap;
   }
   .me label{font-size:12px;color:var(--muted);font-weight:700;white-space:nowrap}
-  .me input{
-    flex:1;background:var(--tile);border:1px solid var(--line);border-radius:10px;
+  .me select, .me input{
+    background:var(--tile);border:1px solid var(--line);border-radius:10px;
     color:var(--cream);font-family:inherit;font-size:14px;font-weight:700;
     padding:9px 11px;outline:none;
   }
-  .me input:focus{border-color:var(--gold)}
-  .me .who{font-size:12px;color:var(--muted);font-weight:600}
-  .me .who b{color:var(--gold)}
+  .me select{flex:1;min-width:110px;cursor:pointer}
+  .me input{width:120px}
+  .me select:focus, .me input:focus{border-color:var(--gold)}
+  .me-note{font-size:11px;color:var(--muted);margin-bottom:16px;text-align:center;line-height:1.5}
+  .me-note b{color:var(--gold)}
 
   /* sync badge */
   .sync{display:flex;justify-content:center;margin-bottom:14px}
@@ -75,15 +77,17 @@
     background:rgba(255,255,255,.02);text-align:center;transition:border-color .2s, background .2s, transform .1s;
   }
   .tab:active{transform:translateY(1px)}
-  .tab .t-no{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em}
-  .tab .t-vs{font-size:14px;font-weight:900;margin-top:3px;letter-spacing:-.01em}
-  .tab .t-when{font-size:10px;color:var(--muted);margin-top:3px}
-  .tab .t-state{font-size:10px;font-weight:800;margin-top:4px;letter-spacing:.03em}
+  .tab .t-no{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.06em}
+  .tab .t-teams{margin-top:6px}
+  .tab .t-team{font-size:15px;font-weight:900;line-height:1.3;letter-spacing:-.01em}
+  .tab .t-vs-sep{font-size:10px;color:var(--muted);font-weight:700;margin:1px 0}
+  .tab .t-when{font-size:11px;color:var(--muted);margin-top:6px}
+  .tab .t-state{font-size:11px;font-weight:800;margin-top:5px;letter-spacing:.03em}
   .tab.active{border-color:var(--gold);background:var(--gold-soft)}
   .tab.active .t-no{color:var(--gold)}
   .tab .t-state.live{color:#FF8b94}
   .tab .t-state.done{color:var(--gold)}
-  .tab .t-state.soon{color:var(--muted)}
+  .tab .t-state.soon{color:#FF5C68;font-weight:900}
 
   .panel{display:none}
   .panel.active{display:block;animation:rise .35s ease both}
@@ -115,13 +119,19 @@
   .colon{font-family:'Anton',sans-serif;font-size:40px;color:var(--muted);padding-bottom:6px}
   .outcome{text-align:center;margin-top:14px;min-height:20px;font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--muted)}
   .outcome.final{color:var(--gold)}
-  .scorers{text-align:center;font-size:12px;color:var(--cream);margin-top:7px;font-weight:600;letter-spacing:.02em}
-  .scorers span{color:var(--muted);font-weight:500}
+  .outcome.soon{color:#FF5C68;font-weight:900;font-size:15px}
+  .scorers{display:flex;justify-content:center;gap:18px;margin-top:9px;flex-wrap:wrap}
+  .scorers .sc-side{font-size:12px;color:var(--cream);font-weight:700;letter-spacing:.02em}
+  .scorers .sc-side .sc-team{color:var(--muted);font-weight:600;margin-right:5px}
 
-  /* my-bet box */
-  .mybet{margin-top:18px;border-top:1px dashed var(--line);padding-top:16px}
-  .mybet .h{font-size:13px;font-weight:800;text-align:center;margin-bottom:12px;letter-spacing:.02em}
-  .mybet .h span{color:var(--muted);font-weight:600}
+  /* my-bet section (별도 카드) */
+  .mybet{margin-top:18px;border:1px solid rgba(242,193,78,.35);border-radius:20px;padding:20px 18px;
+    background:linear-gradient(180deg, rgba(242,193,78,.08), rgba(242,193,78,.02));}
+  .mybet .h{font-size:15px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:.01em;color:var(--gold)}
+  .mybet .h-sub{font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px;font-weight:600}
+  .delbet{width:100%;margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:11px;cursor:pointer;
+    font-family:inherit;font-weight:800;font-size:13px;background:transparent;color:#FF8b94;transition:background .2s}
+  .delbet:hover{background:var(--kr-soft)}
   .bet-tiles{display:flex;align-items:center;gap:8px;justify-content:center}
   input.bt{
     width:56px;height:72px;border-radius:12px;background:var(--tile);border:1px solid var(--line);
@@ -160,10 +170,11 @@
   .pred .p-score{font-family:'Anton',sans-serif;font-size:30px;margin-top:6px;letter-spacing:.04em}
   .pred .p-score .s-kr{color:#FF6B74}.pred .p-score .s-cz{color:#7CB6E8}.pred .p-score .s-col{color:var(--muted);margin:0 4px}
   .pred .p-pick{font-size:11px;font-weight:600;margin-top:4px;color:var(--muted)}
-  .pred .p-result{font-size:11px;font-weight:800;margin-top:6px;min-height:14px;letter-spacing:.03em;color:var(--muted)}
+  .pred .p-result{font-size:14px;font-weight:900;margin-top:8px;min-height:16px;letter-spacing:.03em;color:var(--muted)}
   .pred.win{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold), 0 0 30px -12px var(--gold-soft)}
   .pred.win .p-result{color:var(--gold)}
-  .pred.miss{opacity:.55}
+  .pred.miss{opacity:.82}
+  .pred.miss .p-result{color:#FF5C68}
   .empty{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;padding:18px;border:1px dashed var(--line);border-radius:14px}
 
   /* banner */
@@ -204,7 +215,8 @@
   @media (max-width:380px){
     .tile{width:54px;height:74px;font-size:44px}
     .grid{grid-template-columns:1fr}
-    .tab .t-vs{font-size:13px}
+    .tab{padding:9px 5px}
+    .tab .t-team{font-size:13px}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -216,10 +228,11 @@
 
   <!-- identity -->
   <div class="me">
-    <label>내 이름</label>
-    <input id="meName" type="text" maxlength="12" placeholder="이름을 입력하면 베팅 저장" autocomplete="off">
-    <span class="who" id="meWho"></span>
+    <label>참가자</label>
+    <select id="meName"><option value="">이름 선택</option></select>
+    <input id="mePin" type="password" inputmode="numeric" maxlength="4" placeholder="번호 뒷4자리" autocomplete="off">
   </div>
+  <div class="me-note">베팅 저장·수정·삭제는 <b>본인 휴대폰 번호 뒷 4자리</b> 인증이 필요합니다.</div>
 
   <div class="sync" id="sync"><span class="pill"><span class="dot"></span><span id="syncTxt">로컬 저장 모드</span></span></div>
 
@@ -233,10 +246,11 @@
   <div class="sec">
     <div class="sec-head"><h2>규칙</h2></div>
     <ul class="rules">
-      <li><span class="k">₩</span><span class="v">경기별로 <b>정확한 스코어</b>를 맞힌 사람이 상금 풀을 가져갑니다.</span></li>
-      <li><span class="k">①</span><span class="v">베팅은 <b>킥오프 전까지만</b> 입력·수정 가능 (이후 자동 잠금).</span></li>
-      <li><span class="k">②</span><span class="v">아무도 못 맞히면 상금은 <b>다음 경기로 이월</b>.</span></li>
-      <li><span class="k">③</span><span class="v">두 명 이상 적중 시 상금 <b>균등 분배</b>.</span></li>
+      <li><span class="k">₩</span><span class="v">참가비 <b>1인 1만원</b> · 경기별 상금 풀 <b>5만원 고정</b>(추가 입금 없음).</span></li>
+      <li><span class="k">①</span><span class="v">경기별 <b>정확한 스코어</b>를 맞힌 사람이 상금을 가져갑니다.</span></li>
+      <li><span class="k">②</span><span class="v">베팅은 <b>킥오프 전까지만</b> 입력·수정 가능 (이후 자동 잠금).</span></li>
+      <li><span class="k">③</span><span class="v">아무도 못 맞히면 그 경기 상금은 <b>이월</b>(추가 베팅은 없음).</span></li>
+      <li><span class="k">④</span><span class="v">두 명 이상 적중 시 상금 <b>균등 분배</b>.</span></li>
     </ul>
   </div>
 
@@ -301,11 +315,36 @@ const RESULT_API = 'https://worldcup26.ir/get/games';
 /* ============================================================
    상태 + 저장 백엔드 (Firebase 또는 localStorage)
    ============================================================ */
-const LS = { bets:'wc26-bets', results:'wc26-results', name:'wc26-name' };
+const LS = { bets:'wc26-bets', results:'wc26-results', name:'wc26-name', pin:'wc26-pin' };
 let FB=null, db=null;
 let STATE = { bets:{}, results:{} };   // bets[matchId][userKey]={name,h,a,ts}; results[matchId]={h,a,final,ts}
 let myName = localStorage.getItem(LS.name) || '';
+let myPin  = localStorage.getItem(LS.pin) || '';
 let active = 0;
+
+/* ============================================================
+   참가자 + 번호 뒷자리 인증 (해시).  배팅 가능한 사람 = 1차전 참가자.
+   PIN(휴대폰 뒷 4자리)은 평문 대신 SHA-256(salt:이름:PIN) 해시로 보관.
+   ============================================================ */
+const PARTICIPANTS = ['정태원','임준혁','전민석','전호상','안준홍'];
+const PIN_SALT = 'wc26-kr';
+const PIN_HASH = {
+  '정태원': 'd6eef7120f258e9373130dc0ae548ea2fb94526d0f0e4259c552271f6c850410',
+  '임준혁': '6763747d904baa7ea9d5529b2a05cd5c4a8e6003390a5dfce9729d0984fd425c',
+  '전민석': 'e7ba2361e1171fa2740ac1354cffb675b967322fd6619804148b0e6a00e39294',
+  '전호상': 'af7c139628093611d69c3b258b716ae1c74a8f5c8be49e56f2e26b6d04ad3143',
+  '안준홍': '86f62e5c7b47125845648fdd848f5e235f3c0eab8902247e714e05609113347e',
+};
+async function sha256hex(s){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function verifyPin(name, pin){
+  if(!name || !PIN_HASH[name]) return false;
+  if(!/^\d{4}$/.test(pin||'')) return false;
+  try{ return (await sha256hex(PIN_SALT+':'+name+':'+pin)) === PIN_HASH[name]; }
+  catch(e){ return false; }
+}
 
 const keyOf = s => (s||'').trim().toLowerCase().replace(/\s+/g,'-').replace(/[.#$\[\]/]/g,'');
 const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -344,6 +383,14 @@ function saveBet(matchId, h, a){
     localStorage.setItem(LS.bets, JSON.stringify(STATE.bets)); renderAll();
   }
 }
+function deleteBet(matchId){
+  const uk = keyOf(myName);
+  if(db){ db.ref('bets/'+matchId+'/'+uk).remove(); }
+  else{
+    if(STATE.bets[matchId]) delete STATE.bets[matchId][uk];
+    localStorage.setItem(LS.bets, JSON.stringify(STATE.bets)); renderAll();
+  }
+}
 function setResult(matchId, h, a, final){
   const rec = { h, a, final:!!final, ts:Date.now() };
   if(db){ db.ref('results/'+matchId).set(rec); }
@@ -371,24 +418,6 @@ function betsOf(m){
   for(const k in live) out[k]=live[k];
   return out;
 }
-/* 적중자 목록 (결과 확정 전이면 null) */
-function winnersOf(m){
-  const res=resultOf(m); if(!(res&&res.final)) return null;
-  const bets=betsOf(m);
-  return Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
-}
-/* 실제 상금 풀 = 이 경기 상금 + 앞 경기들에서 적중자 없이 끝난 상금 이월 누적.
-   중간에 적중자가 나오면 그 사람이 가져가므로 이월은 0으로 리셋. */
-function potOf(m){
-  const idx=MATCHES.indexOf(m); let carry=0;
-  for(let i=0;i<idx;i++){
-    const w=winnersOf(MATCHES[i]);
-    if(w===null) continue;        // 아직 결과 미확정 → 이월 미정
-    if(w.length===0) carry+=MATCHES[i].prize;  // 미적중 → 이월
-    else carry=0;                 // 적중자가 가져감 → 이월 소멸
-  }
-  return m.prize+carry;
-}
 function isLocked(m){ return Date.now() >= new Date(m.koUTC).getTime(); }
 function dday(m){
   const diff = new Date(m.koUTC).getTime() - Date.now();
@@ -403,6 +432,20 @@ const won = (h,a,m)=>{ // 결과 텍스트 (한국 관점 표기)
 };
 const fmt = n => Number(n).toLocaleString('ko-KR');
 
+/* 양팀 득점 표시 — 득점자 이름을 알면 이름, 모르면 'N골'.
+   득점이 0인 팀은 생략. */
+function scorersHtml(m,res){
+  const sc = res.scorers || {};
+  const side = (flag, name, goals, names)=>{
+    if(!goals) return '';
+    const detail = (names && names.length) ? names.map(esc).join(' · ') : goals+'골';
+    return `<div class="sc-side"><span class="sc-team">${flag} ${esc(name)}</span>${detail}</div>`;
+  };
+  const html = side(m.home.flag, m.home.name, res.h, sc.home)
+             + side(m.away.flag, m.away.name, res.a, sc.away);
+  return html ? `<div class="scorers">${html}</div>` : '';
+}
+
 /* ============================================================
    렌더링
    ============================================================ */
@@ -416,32 +459,30 @@ function buildTabs(){
     const el=document.createElement('div');
     el.className='tab'+(i===active?' active':''); el.dataset.i=i;
     el.innerHTML = `<div class="t-no">${m.no}</div>
-      <div class="t-vs">${m.home.flag} ${shortVs(m)} ${m.away.flag}</div>
+      <div class="t-teams">
+        <div class="t-team">${m.home.flag} ${esc(m.home.name)}</div>
+        <div class="t-vs-sep">vs</div>
+        <div class="t-team">${m.away.flag} ${esc(m.away.name)}</div>
+      </div>
       <div class="t-when">${m.when}</div>
       <div class="t-state ${state}">${stxt}</div>`;
     el.onclick=()=>{ active=i; renderAll(); };
     t.appendChild(el);
   });
 }
-function shortVs(m){
-  const sh = n => ({'대한민국':'한','체코':'체','멕시코':'멕','남아공':'남'}[n]||n.slice(0,1));
-  return sh(m.home.name)+':'+sh(m.away.name);
-}
-
 function buildPanels(){
   const wrap=document.getElementById('panels'); wrap.innerHTML='';
   MATCHES.forEach((m,i)=>{
     const p=document.createElement('div'); p.className='panel'+(i===active?' active':''); p.id='panel-'+i;
     p.appendChild(renderBoard(m));
+    p.appendChild(renderMyBet(m));
     p.appendChild(renderPredictions(m));
     wrap.appendChild(p);
   });
 }
 
 function renderBoard(m){
-  const res=resultOf(m), locked=isLocked(m);
-  const uk=keyOf(myName);
-  const myBet = betsOf(m)[uk];
+  const res=resultOf(m);
   const wrap=document.createElement('div'); wrap.className='board';
 
   const hS = res ? res.h : '–', aS = res ? res.a : '–';
@@ -458,35 +499,14 @@ function renderBoard(m){
         <div class="badge">${m.away.kr?'KOREA':'AWAY'}</div>
       </div>
     </div>
-    <div class="outcome ${res&&res.final?'final':''}">${
-      res ? (res.final?'최종 결과 · ':'진행중 · ')+won(res.h,res.a,m) : '경기 예정 · '+(dday(m)||'곧 시작')
+    <div class="outcome ${res&&res.final?'final':(res?'':'soon')}">${
+      res ? (res.final?'최종 결과 · ':'진행중 · ')+won(res.h,res.a,m) : '⏳ 경기 예정 · '+(dday(m)||'곧 시작')
     }</div>
-    ${res&&res.scorers&&res.scorers.home&&res.scorers.home.length
-      ? `<div class="scorers">⚽ ${res.scorers.home.map(esc).join(' · ')} <span>(${esc(m.home.kr?m.home.name:m.away.name)})</span></div>` : ''}`;
+    ${res&&res.final ? scorersHtml(m,res) : ''}`;
 
-  // my bet area
-  const bet=document.createElement('div'); bet.className='mybet';
-  if(locked){
-    let mine = myBet ? `<div class="hint">내 베팅: <b style="color:var(--cream)">${myBet.h} : ${myBet.a}</b></div>` :
-      `<div class="hint">이 경기에 베팅하지 않았습니다</div>`;
-    bet.innerHTML = `<div class="lockmsg">🔒 입력 마감 (킥오프)</div>${mine}`;
-  }else{
-    bet.innerHTML = `
-      <div class="h">내 예측 스코어 <span>· ${esc(m.home.name)} : ${esc(m.away.name)}</span></div>
-      <div class="bet-tiles">
-        <input class="bt ${m.home.kr?'kr':''}" id="bh-${m.id}" type="number" min="0" max="99" inputmode="numeric" placeholder="–" value="${myBet?myBet.h:''}">
-        <div class="bet-col">:</div>
-        <input class="bt ${m.away.kr?'kr':''}" id="ba-${m.id}" type="number" min="0" max="99" inputmode="numeric" placeholder="–" value="${myBet?myBet.a:''}">
-      </div>
-      <button class="save" id="save-${m.id}">${myBet?'베팅 수정 저장':'베팅 저장'}</button>
-      <div class="hint" id="hint-${m.id}">${myName?'':'먼저 위에 이름을 입력하세요'}</div>`;
-  }
-  wrap.appendChild(bet);
-
-  // prize + banner
-  const pot=potOf(m); const carry=pot-m.prize;
+  // prize + banner (상금은 경기별 5만원 고정 — 이월돼도 추가 입금 없음)
   const prize=document.createElement('div'); prize.className='prize';
-  prize.innerHTML=`<div class="amt">${fmt(pot)}원</div><div class="lbl">${carry>0?`기본 ${fmt(m.prize)} + 이월 ${fmt(carry)}원`:'정확히 맞히면 독식'}</div>`;
+  prize.innerHTML=`<div class="amt">${fmt(m.prize)}원</div><div class="lbl">참가비 1만원 × ${PARTICIPANTS.length}명 · 맞히면 독식</div>`;
   wrap.appendChild(prize);
 
   if(res && res.final) wrap.appendChild(renderBanner(m,res));
@@ -511,8 +531,35 @@ function renderBoard(m){
   return wrap;
 }
 
+/* 내 예측 입력 — 별도 섹션 카드 (이름 콤보박스 + 번호 뒷자리 인증) */
+function renderMyBet(m){
+  const locked=isLocked(m);
+  const uk=keyOf(myName);
+  const myBet = betsOf(m)[uk];
+  const sec=document.createElement('div'); sec.className='mybet';
+  if(locked){
+    const mine = myBet
+      ? `<div class="hint">${myName?esc(myName)+'님의 예측: ':''}<b style="color:var(--cream)">${myBet.h} : ${myBet.a}</b></div>`
+      : `<div class="hint">이 경기에 베팅 기록이 없습니다</div>`;
+    sec.innerHTML = `<div class="h">🔒 입력 마감</div><div class="h-sub">킥오프가 지나 더 이상 수정할 수 없습니다</div>${mine}`;
+    return sec;
+  }
+  sec.innerHTML = `
+    <div class="h">내 예측 스코어 입력</div>
+    <div class="h-sub">${esc(m.home.name)} : ${esc(m.away.name)} · 위에서 이름·번호 뒷자리 인증</div>
+    <div class="bet-tiles">
+      <input class="bt ${m.home.kr?'kr':''}" id="bh-${m.id}" type="number" min="0" max="99" inputmode="numeric" placeholder="–" value="${myBet?myBet.h:''}">
+      <div class="bet-col">:</div>
+      <input class="bt ${m.away.kr?'kr':''}" id="ba-${m.id}" type="number" min="0" max="99" inputmode="numeric" placeholder="–" value="${myBet?myBet.a:''}">
+    </div>
+    <button class="save" id="save-${m.id}">${myBet?'베팅 수정 저장':'베팅 저장'}</button>
+    ${myBet?`<button class="delbet" id="del-${m.id}">내 베팅 삭제</button>`:''}
+    <div class="hint" id="hint-${m.id}"></div>`;
+  return sec;
+}
+
 function renderBanner(m,res){
-  const pot=potOf(m);
+  const prize=m.prize; // 상금은 5만원 고정
   const bets=betsOf(m);
   const total=Object.keys(bets).length;
   const winners=Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
@@ -520,12 +567,12 @@ function renderBanner(m,res){
   const b=document.createElement('div'); b.className='banner show '+(winners.length?'win':'roll');
   if(winners.length){
     const names=winners.map(w=>esc(w.name)).join(' · ');
-    const per=Math.floor(pot/winners.length);
+    const per=Math.floor(prize/winners.length);
     b.innerHTML = winners.length===1
-      ? `<div class="b-top">WINNER</div><div class="b-main">🏆 ${names} 적중!</div><div class="b-sub">정답 ${res.h}:${res.a} · 상금 ${fmt(pot)}원 단독 획득</div>`
-      : `<div class="b-top">WINNER</div><div class="b-main">🏆 공동 우승 · ${names}</div><div class="b-sub">정답 ${res.h}:${res.a} · ${fmt(pot)}원을 ${winners.length}명이 분배 (1인 ${fmt(per)}원)</div>`;
+      ? `<div class="b-top">WINNER</div><div class="b-main">🏆 ${names} 적중!</div><div class="b-sub">정답 ${res.h}:${res.a} · 상금 ${fmt(prize)}원 단독 획득</div>`
+      : `<div class="b-top">WINNER</div><div class="b-main">🏆 공동 우승 · ${names}</div><div class="b-sub">정답 ${res.h}:${res.a} · ${fmt(prize)}원을 ${winners.length}명이 분배 (1인 ${fmt(per)}원)</div>`;
   }else{
-    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 상금 ${fmt(pot)}원이 ${next?esc(next.no)+'으로':'다음 경기로'} 이월됩니다</div>`;
+    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 ${m.no} 상금 ${fmt(prize)}원은 이월됩니다 (추가 베팅 없음)</div>`;
   }
   return b;
 }
@@ -544,7 +591,7 @@ function renderPredictions(m){
       let cls='', rtxt='';
       if(res && res.final){
         if(+p.h===res.h && +p.a===res.a){ cls='win'; rtxt='🎯 적중'; }
-        else{ cls='miss'; rtxt='오차 '+(Math.abs(p.h-res.h)+Math.abs(p.a-res.a))+'골'; }
+        else{ cls='miss'; rtxt='낙첨'; }
       }else{ rtxt = isLocked(m)?'결과 대기':'예측 완료'; }
       const meTag = k===uk ? '<span class="me-tag">나</span>':'';
       return `<div class="pred ${cls}">
@@ -567,14 +614,29 @@ function renderPredictions(m){
 function wireBoard(m){
   const sv=document.getElementById('save-'+m.id);
   if(sv){
-    sv.onclick=()=>{
+    sv.onclick=async ()=>{
       const hint=document.getElementById('hint-'+m.id);
-      if(!myName.trim()){ hint.className='hint err'; hint.textContent='먼저 위에 이름을 입력하세요'; return; }
-      if(isLocked(m)){ hint.className='hint err'; hint.textContent='입력이 마감되었습니다'; renderAll(); return; }
+      const setErr=t=>{ hint.className='hint err'; hint.textContent=t; };
+      if(!myName){ setErr('위에서 참가자 이름을 선택하세요'); return; }
+      if(isLocked(m)){ setErr('입력이 마감되었습니다'); renderAll(); return; }
       const h=parseInt(document.getElementById('bh-'+m.id).value,10), a=parseInt(document.getElementById('ba-'+m.id).value,10);
-      if(isNaN(h)||isNaN(a)||h<0||a<0){ hint.className='hint err'; hint.textContent='두 팀 점수를 모두 입력하세요'; return; }
+      if(isNaN(h)||isNaN(a)||h<0||a<0){ setErr('두 팀 점수를 모두 입력하세요'); return; }
+      if(!/^\d{4}$/.test(myPin)){ setErr('번호 뒷 4자리를 입력하세요'); return; }
+      if(!await verifyPin(myName,myPin)){ setErr('번호 뒷자리가 일치하지 않습니다 🔒'); return; }
       saveBet(m.id,h,a);
       hint.className='hint'; hint.textContent='저장되었습니다 ✓';
+    };
+  }
+  const dl=document.getElementById('del-'+m.id);
+  if(dl){
+    dl.onclick=async ()=>{
+      const hint=document.getElementById('hint-'+m.id);
+      const setErr=t=>{ hint.className='hint err'; hint.textContent=t; };
+      if(isLocked(m)){ setErr('마감된 경기는 삭제할 수 없습니다'); return; }
+      if(!/^\d{4}$/.test(myPin)){ setErr('번호 뒷 4자리를 입력하세요'); return; }
+      if(!await verifyPin(myName,myPin)){ setErr('번호 뒷자리가 일치하지 않습니다 🔒'); return; }
+      if(!confirm(myName+'님의 '+m.no+' 베팅을 삭제할까요?')) return;
+      deleteBet(m.id);
     };
   }
   const tg=document.getElementById('adm-'+m.id);
@@ -652,13 +714,22 @@ async function fetchResults(){
    init
    ============================================================ */
 (function(){
-  const nameInput=document.getElementById('meName');
-  nameInput.value=myName;
-  document.getElementById('meWho').innerHTML = myName? `반가워요, <b>${esc(myName)}</b>` : '';
-  nameInput.addEventListener('input', e=>{
-    myName=e.target.value; localStorage.setItem(LS.name,myName);
-    document.getElementById('meWho').innerHTML = myName? `반가워요, <b>${esc(myName)}</b>` : '';
-    renderAll();
+  // 참가자 콤보박스 채우기
+  const nameSel=document.getElementById('meName');
+  PARTICIPANTS.forEach(n=>{
+    const o=document.createElement('option'); o.value=n; o.textContent=n; nameSel.appendChild(o);
+  });
+  if(PARTICIPANTS.includes(myName)) nameSel.value=myName; else myName='';
+  nameSel.addEventListener('change', e=>{
+    myName=e.target.value; localStorage.setItem(LS.name,myName); renderAll();
+  });
+
+  // 번호 뒷자리 (숫자만, 인증용)
+  const pinInput=document.getElementById('mePin');
+  pinInput.value=myPin;
+  pinInput.addEventListener('input', e=>{
+    myPin=e.target.value.replace(/\D/g,'').slice(0,4); e.target.value=myPin;
+    localStorage.setItem(LS.pin,myPin);
   });
 
   // 첫 미종료 경기를 기본 탭으로
