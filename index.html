@@ -216,6 +216,10 @@
   .rules .k{flex:0 0 auto;width:22px;height:22px;border-radius:7px;background:var(--gold-soft);color:var(--gold);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:1px}
   .rules .v b{color:var(--gold);font-weight:800}
 
+  .diag{margin-top:24px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02);padding:10px 14px}
+  .diag summary{font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
+  .diag pre{margin-top:10px;font-size:11px;line-height:1.5;color:var(--cream);white-space:pre-wrap;word-break:break-all;
+    background:var(--tile);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:280px;overflow:auto}
   footer{text-align:center;margin-top:30px;font-size:12px;color:var(--muted);line-height:1.7}
   footer .live{display:inline-flex;align-items:center;gap:6px}
   footer .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.6s infinite}
@@ -256,13 +260,18 @@
   <div class="sec">
     <div class="sec-head"><h2>규칙</h2></div>
     <ul class="rules">
-      <li><span class="k">₩</span><span class="v">참가비 <b>1인 1만원</b> · 경기별 상금 풀 <b>5만원 고정</b>(추가 입금 없음).</span></li>
-      <li><span class="k">①</span><span class="v">경기별 <b>정확한 스코어</b>를 맞힌 사람이 상금을 가져갑니다.</span></li>
+      <li><span class="k">₩</span><span class="v">경기마다 <b>1인 1만원</b> × 5명 = 회차 상금 <b>5만원</b>.</span></li>
+      <li><span class="k">①</span><span class="v">경기별 <b>정확한 스코어</b>를 맞힌 사람이 그 경기 상금을 가져갑니다.</span></li>
       <li><span class="k">②</span><span class="v">베팅은 <b>킥오프 전까지만</b> 입력·수정 가능 (이후 자동 잠금).</span></li>
-      <li><span class="k">③</span><span class="v">아무도 못 맞히면 그 경기 상금은 <b>이월</b>(추가 베팅은 없음).</span></li>
+      <li><span class="k">③</span><span class="v">아무도 못 맞히면 상금은 <b>다음 경기로 합산 이월</b> (추가 입금 없이 예측만).</span></li>
       <li><span class="k">④</span><span class="v">두 명 이상 적중 시 상금 <b>균등 분배</b>.</span></li>
     </ul>
   </div>
+
+  <details class="diag">
+    <summary>🔧 자동 결과 연결 테스트 (worldcup26.ir)</summary>
+    <pre id="diagPre">페이지 로드 시 자동으로 결과 서버에 연결해 응답을 표시합니다…</pre>
+  </details>
 
   <footer>
     <div class="live"><span class="dot"></span> <span id="footMode">결과는 링크를 연 모두에게 공유됩니다</span></div>
@@ -771,6 +780,9 @@ function parseScorers(v){
 function setAutoUpd(txt){
   const el=document.getElementById('autoUpd'); if(el) el.innerHTML=txt;
 }
+function setDiag(txt){
+  const el=document.getElementById('diagPre'); if(el) el.textContent=txt;
+}
 const hhmm=()=>new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
 const sameResult=(c,h,a,f)=> c && +c.h===h && +c.a===a && !!c.final===!!f;
 
@@ -788,12 +800,30 @@ async function fetchResults(){
   if(!RESULT_API) return;
   try{
     const res=await fetch(RESULT_API,{cache:'no-store'});
-    if(!res.ok){ setAutoUpd(`자동 갱신: 결과 소스 응답 없음 · <b>수동 입력</b>으로 대체 (${hhmm()})`); return; }
+    if(!res.ok){
+      setAutoUpd(`자동 갱신: 결과 소스 응답 없음 · <b>수동 입력</b>으로 대체 (${hhmm()})`);
+      setDiag(`⚠️ HTTP ${res.status} — 서버가 요청을 거부했습니다(봇 차단 가능).\n브라우저에서도 같은 결과면 자동 fetch 불가 → 관리자 수동 입력 사용.\n${hhmm()}`);
+      return;
+    }
     let data=await res.json();
     const games=Array.isArray(data)?data:(data.games||data.data||data.matches||[]);
-    if(!Array.isArray(games)||!games.length){ setAutoUpd(`자동 갱신: 1분마다 확인 중 · 마지막 ${hhmm()}`); return; }
+    if(!Array.isArray(games)||!games.length){
+      setAutoUpd(`자동 갱신: 1분마다 확인 중 · 마지막 ${hhmm()}`);
+      setDiag(`✅ 연결 OK · HTTP ${res.status} 이지만 경기 배열이 비어 있음.\n응답 키: ${Object.keys(data||{}).join(', ')||'(배열/빈값)'}\n${hhmm()}`);
+      return;
+    }
     const teams=await ensureTeams();
     setAutoUpd(`경기 결과 자동 갱신 중 · 1분마다 · 마지막 <b>${hhmm()}</b>`);
+    // --- 진단: A조 경기 원시 응답 표시 (스키마/값 확인용) ---
+    try{
+      const aGames=games.filter(x=>String(x.group||x.group_name||'').toUpperCase()==='A');
+      let dbg=`✅ 연결 성공 · HTTP ${res.status} · 총 ${games.length}경기 · A조 ${aGames.length}경기 · ${hhmm()}\n`;
+      dbg+=`팀ID→국가 매핑: ${teams?'성공('+Object.keys(teams).length+'팀)':'실패(/get/teams)'}\n──── A조 경기 원시값 ────\n`;
+      (aGames.length?aGames:games).slice(0,8).forEach(g=>{
+        dbg+=JSON.stringify({md:g.matchday??g.match_day??g.round, H:g.home_team_id, A:g.away_team_id, hs:g.home_score, as:g.away_score, hsc:g.home_scorers, asc:g.away_scorers, fin:g.finished, te:g.time_elapsed})+'\n';
+      });
+      setDiag(dbg);
+    }catch(_){}
     MATCHES.forEach(m=>{
       if(!isLocked(m)) return;                     // 킥오프 전이면 결과 안 받음(가짜값 방지)
       const ex=resultOf(m); if(ex && ex.final) return; // 이미 확정(시드/수동/확정)된 경기 보호
@@ -822,6 +852,7 @@ async function fetchResults(){
     });
   }catch(e){ /* CORS/네트워크 실패 → seed·수동 입력으로 동작 */
     setAutoUpd(`자동 갱신 불가(차단/오류) · <b>결과는 수동 입력</b>으로 표시됩니다 (${hhmm()})`);
+    setDiag(`❌ 연결 실패: ${e&&e.message||e}\n→ 브라우저가 worldcup26.ir 호출을 막았을 가능성(CORS/네트워크).\n이 경우 자동 fetch는 동작 불가 → 관리자(임준혁) 수동 입력 사용.\n${hhmm()}`);
   }
 }
 
