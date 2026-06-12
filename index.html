@@ -263,7 +263,7 @@
       <li><span class="k">₩</span><span class="v">경기마다 <b>1인 1만원</b> × 5명 = 회차 상금 <b>5만원</b>.</span></li>
       <li><span class="k">①</span><span class="v">경기별 <b>정확한 스코어</b>를 맞힌 사람이 그 경기 상금을 가져갑니다.</span></li>
       <li><span class="k">②</span><span class="v">베팅은 <b>킥오프 전까지만</b> 입력·수정 가능 (이후 자동 잠금).</span></li>
-      <li><span class="k">③</span><span class="v">아무도 못 맞히면 상금은 <b>다음 경기로 합산 이월</b> (추가 입금 없이 예측만).</span></li>
+      <li><span class="k">③</span><span class="v">아무도 못 맞히면 상금 <b>5만원 그대로 다음 경기로 이월</b> (추가 입금 없이 예측만 · 누적 안 됨).</span></li>
       <li><span class="k">④</span><span class="v">두 명 이상 적중 시 상금 <b>균등 분배</b>.</span></li>
     </ul>
   </div>
@@ -482,17 +482,12 @@ function winnersOf(m){
   const bets=betsOf(m);
   return Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
 }
-/* 실제 상금 풀 = 이 경기 5만 + 앞 경기들에서 적중자 없이 끝난 5만 이월 누적.
-   (경기마다 1만×5명=5만, 추가 입금 없이 미적중분이 다음 경기로 넘어감) */
-function potOf(m){
-  const idx=MATCHES.indexOf(m); let carry=0;
-  for(let i=0;i<idx;i++){
-    const w=winnersOf(MATCHES[i]);
-    if(w===null){ carry=0; break; }        // 앞 경기 미확정 → 이월은 거기 묶임(이 경기엔 미반영)
-    if(w.length===0) carry+=MATCHES[i].prize; // 미적중 → 이월
-    else carry=0;                          // 적중자가 가져감 → 이월 리셋
-  }
-  return m.prize+carry;
+/* 이 경기가 '이월 판'인지 = 직전 경기가 적중자 없이 종료됐는지.
+   상금은 누적되지 않고 5만원 그대로 다음 경기로 넘어감(추가 입금 없음). */
+function isCarry(m){
+  const idx=MATCHES.indexOf(m); if(idx<=0) return false;
+  const w=winnersOf(MATCHES[idx-1]);
+  return w!==null && w.length===0;
 }
 function isLocked(m){ return Date.now() >= new Date(m.koUTC).getTime(); }
 function dday(m){
@@ -580,10 +575,10 @@ function renderBoard(m){
     }</div>
     ${res&&res.final ? scorersHtml(m,res) : ''}`;
 
-  // prize + banner (경기별 5만 + 앞 경기 미적중 이월 누적, 추가 입금 없음)
-  const pot=potOf(m); const carry=pot-m.prize;
+  // prize + banner (상금 5만원 고정 — 이월돼도 누적 없이 그대로 다음 경기로)
+  const carry=isCarry(m);
   const prize=document.createElement('div'); prize.className='prize';
-  prize.innerHTML=`<div class="amt">${fmt(pot)}원</div><div class="lbl">${carry>0?`이 경기 ${fmt(m.prize)} + 이월 ${fmt(carry)}원`:`참가비 1만원 × ${PARTICIPANTS.length}명 · 맞히면 독식`}</div>`;
+  prize.innerHTML=`<div class="amt">${fmt(m.prize)}원</div><div class="lbl">${carry?'🎁 이월된 상금 · 지난 경기에서 넘어옴(추가 입금 없음)':`참가비 1만원 × ${PARTICIPANTS.length}명 · 맞히면 독식`}</div>`;
   wrap.appendChild(prize);
 
   if(res && res.final) wrap.appendChild(renderBanner(m,res));
@@ -639,7 +634,7 @@ function renderMyBet(m){
 }
 
 function renderBanner(m,res){
-  const prize=potOf(m); // 이 경기 5만 + 앞 경기 미적중 이월 누적
+  const prize=m.prize; // 상금 5만원 고정(이월돼도 누적 없음)
   const bets=betsOf(m);
   const total=Object.keys(bets).length;
   const winners=Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
@@ -652,7 +647,7 @@ function renderBanner(m,res){
       ? `<div class="b-top">WINNER</div><div class="b-main">🏆 ${names} 적중!</div><div class="b-sub">정답 ${res.h}:${res.a} · 상금 ${fmt(prize)}원 단독 획득</div>`
       : `<div class="b-top">WINNER</div><div class="b-main">🏆 공동 우승 · ${names}</div><div class="b-sub">정답 ${res.h}:${res.a} · ${fmt(prize)}원을 ${winners.length}명이 분배 (1인 ${fmt(per)}원)</div>`;
   }else{
-    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 상금 ${fmt(prize)}원이 ${next?esc(next.no)+'으로 이월':'이월'}됩니다 (추가 입금 없이 다음 경기 예측만)</div>`;
+    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 상금 ${fmt(prize)}원이 ${next?esc(next.no)+'으로':'다음 경기로'} 그대로 이월 (추가 입금 없이 예측만, 5만원 유지)</div>`;
   }
   return b;
 }
