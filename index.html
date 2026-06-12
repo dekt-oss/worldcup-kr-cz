@@ -376,13 +376,28 @@ const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;
 
 function fbEnabled(){ return !!(FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL); }
 
+/* 시드 확정 경기(공식결과 고정)에 잘못 들어온 자동 결과를 정리.
+   관리자 수동(source==='manual')은 보존. 자동/태그없음만 제거. */
+function healSeedResults(){
+  let changed=false;
+  MATCHES.forEach(m=>{
+    if(m.seed && m.seed.final){
+      const r=STATE.results[m.id];
+      if(r && r.source!=='manual'){
+        if(db){ db.ref('results/'+m.id).remove(); }
+        else { delete STATE.results[m.id]; changed=true; }
+      }
+    }
+  });
+  if(changed) localStorage.setItem(LS.results, JSON.stringify(STATE.results));
+}
 function initBackend(){
   if(fbEnabled() && window.firebase){
     try{
       FB = firebase.initializeApp(FIREBASE_CONFIG);
       db = firebase.database();
       db.ref('bets').on('value', s=>{ STATE.bets = s.val()||{}; renderAll(); });
-      db.ref('results').on('value', s=>{ STATE.results = s.val()||{}; renderAll(); });
+      db.ref('results').on('value', s=>{ STATE.results = s.val()||{}; healSeedResults(); renderAll(); });
       setSync(true,'실시간 공유 중');
       document.getElementById('footMode').textContent='결과·예측이 모두에게 실시간 공유됩니다';
       return;
@@ -391,6 +406,7 @@ function initBackend(){
   // local fallback
   try{ STATE.bets = JSON.parse(localStorage.getItem(LS.bets)||'{}'); }catch(e){ STATE.bets={}; }
   try{ STATE.results = JSON.parse(localStorage.getItem(LS.results)||'{}'); }catch(e){ STATE.results={}; }
+  healSeedResults();
   setSync(false,'이 기기에만 저장 (공유 안 됨)');
   document.getElementById('footMode').textContent='이 기기에 저장 — 공유하려면 Firebase 설정 필요';
 }
@@ -416,8 +432,8 @@ function deleteBet(matchId){
     localStorage.setItem(LS.bets, JSON.stringify(STATE.bets)); renderAll();
   }
 }
-function setResult(matchId, h, a, final, scorers){
-  const rec = { h, a, final:!!final, ts:Date.now() };
+function setResult(matchId, h, a, final, scorers, source){
+  const rec = { h, a, final:!!final, ts:Date.now(), source:source||'manual' };
   if(scorers) rec.scorers = scorers;   // {home:[],away:[]} (자동 fetch 시)
   if(db){ db.ref('results/'+matchId).set(rec); }
   else{ STATE.results[matchId]=rec; localStorage.setItem(LS.results, JSON.stringify(STATE.results)); renderAll(); }
@@ -431,8 +447,14 @@ function clearResult(matchId){
 function resultOf(m){
   const seedScorers = (m.seed && m.seed.scorers) || null;
   const r = STATE.results[m.id];
-  // 득점자: 자동/수동 결과의 scorers 우선, 없으면 seed(1차전) 폴백
-  if(r && r.h!=null && r.a!=null) return { h:+r.h, a:+r.a, final:!!r.final, scorers:(r.scorers||seedScorers) };
+  const has = r && r.h!=null && r.a!=null;
+  // 1) 관리자 수동 확정 최우선
+  if(has && r.source==='manual') return { h:+r.h, a:+r.a, final:!!r.final, scorers:(r.scorers||seedScorers) };
+  // 2) 시드 확정(공식 결과)은 불안정한 자동값보다 우선 — 1차전 2:1 보호
+  if(m.seed && m.seed.final) return { h:m.seed.h, a:m.seed.a, final:true, scorers:seedScorers };
+  // 3) 자동 fetch 결과
+  if(has) return { h:+r.h, a:+r.a, final:!!r.final, scorers:(r.scorers||seedScorers) };
+  // 4) 시드(미확정)
   if(m.seed) return { h:m.seed.h, a:m.seed.a, final:!!m.seed.final, scorers:seedScorers };
   return null;
 }
@@ -705,7 +727,7 @@ function wireBoard(m){
     const h=parseInt(document.getElementById('ah-'+m.id).value,10), a=parseInt(document.getElementById('aa-'+m.id).value,10);
     if(isNaN(h)||isNaN(a)||h<0||a<0){ setErr('두 팀 점수를 입력하세요'); return; }
     if(!await verifyPin('임준혁',myPin)){ setErr('관리자(임준혁) 번호 뒷자리 인증 필요 🔒'); return; }
-    setResult(m.id,h,a,true);
+    setResult(m.id,h,a,true,null,'manual');
     if(hint){ hint.className='hint'; hint.textContent='결과가 확정·공유되었습니다 ✓'; }
   };
   const aclr=document.getElementById('aclr-'+m.id);
@@ -773,6 +795,8 @@ async function fetchResults(){
     const teams=await ensureTeams();
     setAutoUpd(`경기 결과 자동 갱신 중 · 1분마다 · 마지막 <b>${hhmm()}</b>`);
     MATCHES.forEach(m=>{
+      if(!isLocked(m)) return;                     // 킥오프 전이면 결과 안 받음(가짜값 방지)
+      const ex=resultOf(m); if(ex && ex.final) return; // 이미 확정(시드/수동/확정)된 경기 보호
       // 조 + matchday 로 경기 매칭
       const g=games.find(x=> String(x.group||x.group_name||'').toUpperCase()===m.wcGroup
         && +(x.matchday||x.match_day||x.round)===m.wcMatchday );
@@ -792,9 +816,9 @@ async function fetchResults(){
         || g.finished===true;
       const scorers=(hsc.length||asc.length)?{home:hsc,away:asc}:null;
       const cur=STATE.results[m.id];
-      if(cur && cur.final) return;               // 관리자 수동 확정은 보존
+      if(cur && cur.source==='manual') return;   // 관리자 수동값은 보존
       if(sameResult(cur,h,a,finished) && !scorers) return; // 변화 없으면 쓰기 생략
-      setResult(m.id,h,a,finished,scorers);
+      setResult(m.id,h,a,finished,scorers,'auto');
     });
   }catch(e){ /* CORS/네트워크 실패 → seed·수동 입력으로 동작 */
     setAutoUpd(`자동 갱신 불가(차단/오류) · <b>결과는 수동 입력</b>으로 표시됩니다 (${hhmm()})`);
