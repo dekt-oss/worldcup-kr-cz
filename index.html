@@ -159,6 +159,7 @@
   .pred .p-name .me-tag{font-size:10px;background:var(--gold-soft);color:var(--gold);padding:1px 6px;border-radius:999px;font-weight:800}
   .pred .p-score{font-family:'Anton',sans-serif;font-size:30px;margin-top:6px;letter-spacing:.04em}
   .pred .p-score .s-kr{color:#FF6B74}.pred .p-score .s-cz{color:#7CB6E8}.pred .p-score .s-col{color:var(--muted);margin:0 4px}
+  .pred .p-pick{font-size:11px;font-weight:600;margin-top:4px;color:var(--muted)}
   .pred .p-result{font-size:11px;font-weight:800;margin-top:6px;min-height:14px;letter-spacing:.03em;color:var(--muted)}
   .pred.win{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold), 0 0 30px -12px var(--gold-soft)}
   .pred.win .p-result{color:var(--gold)}
@@ -275,7 +276,14 @@ const MATCHES = [
   { id:'kr-cz', no:'1차전', krHome:true,
     home:{flag:'🇰🇷',name:'대한민국',kr:true}, away:{flag:'🇨🇿',name:'체코',kr:false},
     koUTC:'2026-06-12T02:00:00Z', when:'6/12(금) 11:00', venue:'과달라하라 · Estadio Akron',
-    prize:50000, seed:{h:2,a:1,final:true,scorers:{home:['황인범','오현규'],away:[]}} },
+    prize:50000, seed:{h:2,a:1,final:true,scorers:{home:['황인범','오현규'],away:[]}},
+    seedBets:[
+      {name:'정태원',h:1,a:2},
+      {name:'임준혁',h:0,a:1},
+      {name:'전민석',h:0,a:2},
+      {name:'전호상',h:1,a:0},
+      {name:'안준홍',h:2,a:0},
+    ] },
   { id:'mx-kr', no:'2차전', krHome:false,
     home:{flag:'🇲🇽',name:'멕시코',kr:false}, away:{flag:'🇰🇷',name:'대한민국',kr:true},
     koUTC:'2026-06-19T01:00:00Z', when:'6/19(금) 10:00', venue:'과달라하라 · Estadio Akron',
@@ -354,10 +362,19 @@ function resultOf(m){
   if(m.seed) return { h:m.seed.h, a:m.seed.a, final:!!m.seed.final, scorers:seedScorers };
   return null;
 }
+/* 베팅 목록 = 코드 시드(seedBets) + Firebase 실시간 데이터 병합.
+   같은 이름이면 Firebase 값이 우선(시드를 덮어씀). */
+function betsOf(m){
+  const out={};
+  if(m.seedBets) m.seedBets.forEach(b=>{ out[keyOf(b.name)]={name:b.name,h:b.h,a:b.a,ts:0,seed:true}; });
+  const live=STATE.bets[m.id]||{};
+  for(const k in live) out[k]=live[k];
+  return out;
+}
 /* 적중자 목록 (결과 확정 전이면 null) */
 function winnersOf(m){
   const res=resultOf(m); if(!(res&&res.final)) return null;
-  const bets=STATE.bets[m.id]||{};
+  const bets=betsOf(m);
   return Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
 }
 /* 실제 상금 풀 = 이 경기 상금 + 앞 경기들에서 적중자 없이 끝난 상금 이월 누적.
@@ -424,7 +441,7 @@ function buildPanels(){
 function renderBoard(m){
   const res=resultOf(m), locked=isLocked(m);
   const uk=keyOf(myName);
-  const myBet = (STATE.bets[m.id]||{})[uk];
+  const myBet = betsOf(m)[uk];
   const wrap=document.createElement('div'); wrap.className='board';
 
   const hS = res ? res.h : '–', aS = res ? res.a : '–';
@@ -496,7 +513,7 @@ function renderBoard(m){
 
 function renderBanner(m,res){
   const pot=potOf(m);
-  const bets=STATE.bets[m.id]||{};
+  const bets=betsOf(m);
   const total=Object.keys(bets).length;
   const winners=Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
   const idx=MATCHES.indexOf(m); const next=MATCHES[idx+1];
@@ -515,7 +532,7 @@ function renderBanner(m,res){
 
 function renderPredictions(m){
   const res=resultOf(m);
-  const bets=STATE.bets[m.id]||{};
+  const bets=betsOf(m);
   const entries=Object.entries(bets).sort((a,b)=>(a[1].ts||0)-(b[1].ts||0));
   const sec=document.createElement('div'); sec.className='sec';
   const uk=keyOf(myName);
@@ -533,6 +550,7 @@ function renderPredictions(m){
       return `<div class="pred ${cls}">
         <div class="p-name">${esc(p.name||k)} ${meTag}</div>
         <div class="p-score"><span class="${m.home.kr?'s-kr':'s-cz'}">${p.h}</span><span class="s-col">:</span><span class="${m.away.kr?'s-kr':'s-cz'}">${p.a}</span></div>
+        <div class="p-pick">${esc(won(p.h,p.a,m))} 예측</div>
         <div class="p-result">${rtxt}</div>
       </div>`;
     }).join('');
