@@ -57,6 +57,10 @@
   .me select:focus, .me input:focus{border-color:var(--gold)}
   .me-note{font-size:11px;color:var(--muted);margin-bottom:16px;text-align:center;line-height:1.5}
   .me-note b{color:var(--gold)}
+  .auth-badge{font-size:11px;font-weight:800;padding:6px 10px;border-radius:999px;white-space:nowrap;
+    border:1px solid var(--line);color:var(--muted);background:rgba(255,255,255,.03)}
+  .auth-badge.ok{color:var(--green);border-color:rgba(86,210,122,.5);background:rgba(86,210,122,.10)}
+  .auth-badge.no{color:#FF8b94;border-color:rgba(226,55,68,.4);background:var(--kr-soft)}
 
   /* sync badge */
   .sync{display:flex;justify-content:center;margin-bottom:14px}
@@ -235,8 +239,9 @@
     <label>참가자</label>
     <select id="meName"><option value="">이름 선택</option></select>
     <input id="mePin" type="password" inputmode="numeric" maxlength="4" placeholder="번호 뒷4자리" autocomplete="off">
+    <span class="auth-badge" id="authBadge">참가자를 선택하세요</span>
   </div>
-  <div class="me-note">베팅 저장·수정·삭제는 <b>본인 휴대폰 번호 뒷 4자리</b> 인증이 필요합니다.</div>
+  <div class="me-note">베팅 저장·수정·삭제·<b>예측 현황 조회</b>는 <b>본인 휴대폰 번호 뒷 4자리</b> 인증이 필요합니다.</div>
 
   <div class="sync" id="sync"><span class="pill"><span class="dot"></span><span id="syncTxt">로컬 저장 모드</span></span></div>
   <div class="me-note" id="autoUpd" style="margin-top:-4px">경기 결과 자동 갱신 대기 중…</div>
@@ -292,7 +297,7 @@ const FIREBASE_CONFIG = {
    home/away 순서는 실제 경기 기준. krHome=true면 한국이 홈.
    ============================================================ */
 const MATCHES = [
-  { id:'kr-cz', no:'1차전', krHome:true,
+  { id:'kr-cz', no:'1차전', krHome:true, wcGroup:'A', wcMatchday:1,
     home:{flag:'🇰🇷',name:'대한민국',kr:true}, away:{flag:'🇨🇿',name:'체코',kr:false},
     koUTC:'2026-06-12T02:00:00Z', when:'6/12(금) 11:00', venue:'과달라하라 · Estadio Akron',
     prize:50000, seed:{h:2,a:1,final:true,scorers:{home:['황인범','오현규'],away:[]}},
@@ -303,11 +308,11 @@ const MATCHES = [
       {name:'전호상',h:1,a:0},
       {name:'안준홍',h:2,a:0},
     ] },
-  { id:'mx-kr', no:'2차전', krHome:false,
+  { id:'mx-kr', no:'2차전', krHome:false, wcGroup:'A', wcMatchday:2,
     home:{flag:'🇲🇽',name:'멕시코',kr:false}, away:{flag:'🇰🇷',name:'대한민국',kr:true},
     koUTC:'2026-06-19T01:00:00Z', when:'6/19(금) 10:00', venue:'과달라하라 · Estadio Akron',
     prize:50000, seed:null },
-  { id:'za-kr', no:'3차전', krHome:false,
+  { id:'za-kr', no:'3차전', krHome:false, wcGroup:'A', wcMatchday:3,
     home:{flag:'🇿🇦',name:'남아공',kr:false}, away:{flag:'🇰🇷',name:'대한민국',kr:true},
     koUTC:'2026-06-25T01:00:00Z', when:'6/25(목) 10:00', venue:'몬테레이 · Estadio BBVA',
     prize:50000, seed:null },
@@ -326,6 +331,7 @@ let STATE = { bets:{}, results:{} };   // bets[matchId][userKey]={name,h,a,ts}; 
 let myName = localStorage.getItem(LS.name) || '';
 let myPin  = localStorage.getItem(LS.pin) || '';
 let active = 0;
+let authed = false;   // 이름+뒷자리 인증 통과 여부
 
 /* ============================================================
    참가자 + 번호 뒷자리 인증 (해시).  배팅 가능한 사람 = 1차전 참가자.
@@ -349,6 +355,20 @@ async function verifyPin(name, pin){
   if(!/^\d{4}$/.test(pin||'')) return false;
   try{ return (await sha256hex(PIN_SALT+':'+name+':'+pin)) === PIN_HASH[name]; }
   catch(e){ return false; }
+}
+const isAdmin = ()=> myName==='임준혁';   // 결과 수정 권한자
+/* 이름+뒷자리 인증 상태 갱신 → 배지/그리드 표시 제어 */
+async function refreshAuth(){
+  const ok = await verifyPin(myName, myPin);
+  const changed = ok!==authed;
+  authed = ok;
+  const badge=document.getElementById('authBadge');
+  if(badge){
+    if(!myName){ badge.className='auth-badge'; badge.textContent='참가자를 선택하세요'; }
+    else if(ok){ badge.className='auth-badge ok'; badge.textContent='✓ 인증됨 · '+myName; }
+    else{ badge.className='auth-badge no'; badge.textContent='🔒 미인증 — 번호 뒷 4자리 입력'; }
+  }
+  if(changed) renderAll();
 }
 
 const keyOf = s => (s||'').trim().toLowerCase().replace(/\s+/g,'-').replace(/[.#$\[\]/]/g,'');
@@ -396,8 +416,9 @@ function deleteBet(matchId){
     localStorage.setItem(LS.bets, JSON.stringify(STATE.bets)); renderAll();
   }
 }
-function setResult(matchId, h, a, final){
+function setResult(matchId, h, a, final, scorers){
   const rec = { h, a, final:!!final, ts:Date.now() };
+  if(scorers) rec.scorers = scorers;   // {home:[],away:[]} (자동 fetch 시)
   if(db){ db.ref('results/'+matchId).set(rec); }
   else{ STATE.results[matchId]=rec; localStorage.setItem(LS.results, JSON.stringify(STATE.results)); renderAll(); }
 }
@@ -410,7 +431,8 @@ function clearResult(matchId){
 function resultOf(m){
   const seedScorers = (m.seed && m.seed.scorers) || null;
   const r = STATE.results[m.id];
-  if(r && r.h!=null && r.a!=null) return { h:+r.h, a:+r.a, final:!!r.final, scorers:seedScorers };
+  // 득점자: 자동/수동 결과의 scorers 우선, 없으면 seed(1차전) 폴백
+  if(r && r.h!=null && r.a!=null) return { h:+r.h, a:+r.a, final:!!r.final, scorers:(r.scorers||seedScorers) };
   if(m.seed) return { h:m.seed.h, a:m.seed.a, final:!!m.seed.final, scorers:seedScorers };
   return null;
 }
@@ -422,6 +444,24 @@ function betsOf(m){
   const live=STATE.bets[m.id]||{};
   for(const k in live) out[k]=live[k];
   return out;
+}
+/* 적중자 목록 (결과 확정 전이면 null) */
+function winnersOf(m){
+  const res=resultOf(m); if(!(res&&res.final)) return null;
+  const bets=betsOf(m);
+  return Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
+}
+/* 실제 상금 풀 = 이 경기 5만 + 앞 경기들에서 적중자 없이 끝난 5만 이월 누적.
+   (경기마다 1만×5명=5만, 추가 입금 없이 미적중분이 다음 경기로 넘어감) */
+function potOf(m){
+  const idx=MATCHES.indexOf(m); let carry=0;
+  for(let i=0;i<idx;i++){
+    const w=winnersOf(MATCHES[i]);
+    if(w===null){ carry=0; break; }        // 앞 경기 미확정 → 이월은 거기 묶임(이 경기엔 미반영)
+    if(w.length===0) carry+=MATCHES[i].prize; // 미적중 → 이월
+    else carry=0;                          // 적중자가 가져감 → 이월 리셋
+  }
+  return m.prize+carry;
 }
 function isLocked(m){ return Date.now() >= new Date(m.koUTC).getTime(); }
 function dday(m){
@@ -509,19 +549,21 @@ function renderBoard(m){
     }</div>
     ${res&&res.final ? scorersHtml(m,res) : ''}`;
 
-  // prize + banner (상금은 경기별 5만원 고정 — 이월돼도 추가 입금 없음)
+  // prize + banner (경기별 5만 + 앞 경기 미적중 이월 누적, 추가 입금 없음)
+  const pot=potOf(m); const carry=pot-m.prize;
   const prize=document.createElement('div'); prize.className='prize';
-  prize.innerHTML=`<div class="amt">${fmt(m.prize)}원</div><div class="lbl">참가비 1만원 × ${PARTICIPANTS.length}명 · 맞히면 독식</div>`;
+  prize.innerHTML=`<div class="amt">${fmt(pot)}원</div><div class="lbl">${carry>0?`이 경기 ${fmt(m.prize)} + 이월 ${fmt(carry)}원`:`참가비 1만원 × ${PARTICIPANTS.length}명 · 맞히면 독식`}</div>`;
   wrap.appendChild(prize);
 
   if(res && res.final) wrap.appendChild(renderBanner(m,res));
 
-  // admin override
+  // admin override — 관리자(임준혁)만 노출
+  if(isAdmin()){
   const admin=document.createElement('div'); admin.className='admin';
   admin.innerHTML=`
-    <button class="toggle" id="adm-${m.id}">결과 직접 입력 / 수정</button>
+    <button class="toggle" id="adm-${m.id}">결과 직접 입력 / 수정 (관리자)</button>
     <div class="box" id="admbox-${m.id}">
-      <div class="t">최종 스코어 입력 (자동 결과가 틀리거나 비어 있을 때)</div>
+      <div class="t">최종 스코어 입력 · 번호 뒷자리 인증 필요 (자동 결과가 틀리거나 비어 있을 때)</div>
       <div class="row">
         <input id="ah-${m.id}" type="number" min="0" max="99" value="${res?res.h:''}" placeholder="${esc(m.home.name)}">
         <span class="bet-col" style="font-size:24px">:</span>
@@ -531,8 +573,10 @@ function renderBoard(m){
         <button class="set" id="aset-${m.id}">최종 확정</button>
         <button class="clr" id="aclr-${m.id}">자동값으로 되돌리기</button>
       </div>
+      <div class="hint" id="admhint-${m.id}"></div>
     </div>`;
   wrap.appendChild(admin);
+  }
   return wrap;
 }
 
@@ -564,7 +608,7 @@ function renderMyBet(m){
 }
 
 function renderBanner(m,res){
-  const prize=m.prize; // 상금은 5만원 고정
+  const prize=potOf(m); // 이 경기 5만 + 앞 경기 미적중 이월 누적
   const bets=betsOf(m);
   const total=Object.keys(bets).length;
   const winners=Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
@@ -577,7 +621,7 @@ function renderBanner(m,res){
       ? `<div class="b-top">WINNER</div><div class="b-main">🏆 ${names} 적중!</div><div class="b-sub">정답 ${res.h}:${res.a} · 상금 ${fmt(prize)}원 단독 획득</div>`
       : `<div class="b-top">WINNER</div><div class="b-main">🏆 공동 우승 · ${names}</div><div class="b-sub">정답 ${res.h}:${res.a} · ${fmt(prize)}원을 ${winners.length}명이 분배 (1인 ${fmt(per)}원)</div>`;
   }else{
-    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 ${m.no} 상금 ${fmt(prize)}원은 이월됩니다 (추가 베팅 없음)</div>`;
+    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 상금 ${fmt(prize)}원이 ${next?esc(next.no)+'으로 이월':'이월'}됩니다 (추가 입금 없이 다음 경기 예측만)</div>`;
   }
   return b;
 }
@@ -588,6 +632,12 @@ function renderPredictions(m){
   const entries=Object.entries(bets).sort((a,b)=>(a[1].ts||0)-(b[1].ts||0));
   const sec=document.createElement('div'); sec.className='sec';
   const uk=keyOf(myName);
+  // 조회 인증: 이름+번호 뒷자리 인증 전에는 그리드 비공개
+  if(!authed){
+    sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">🔒 인증 필요</div></div>
+      <div class="empty">🔒 위에서 <b style="color:var(--gold)">이름과 번호 뒷 4자리</b>를 인증하면<br>${entries.length}명의 예측 현황이 공개됩니다</div>`;
+    return sec;
+  }
   let cards;
   if(entries.length===0){
     cards=`<div class="empty">아직 베팅한 사람이 없습니다${isLocked(m)?'':' · 첫 베팅을 남겨보세요'}</div>`;
@@ -649,13 +699,21 @@ function wireBoard(m){
   const tg=document.getElementById('adm-'+m.id);
   if(tg) tg.onclick=()=>document.getElementById('admbox-'+m.id).classList.toggle('show');
   const aset=document.getElementById('aset-'+m.id);
-  if(aset) aset.onclick=()=>{
+  if(aset) aset.onclick=async ()=>{
+    const hint=document.getElementById('admhint-'+m.id);
+    const setErr=t=>{ if(hint){hint.className='hint err'; hint.textContent=t;} };
     const h=parseInt(document.getElementById('ah-'+m.id).value,10), a=parseInt(document.getElementById('aa-'+m.id).value,10);
-    if(isNaN(h)||isNaN(a)||h<0||a<0) return;
+    if(isNaN(h)||isNaN(a)||h<0||a<0){ setErr('두 팀 점수를 입력하세요'); return; }
+    if(!await verifyPin('임준혁',myPin)){ setErr('관리자(임준혁) 번호 뒷자리 인증 필요 🔒'); return; }
     setResult(m.id,h,a,true);
+    if(hint){ hint.className='hint'; hint.textContent='결과가 확정·공유되었습니다 ✓'; }
   };
   const aclr=document.getElementById('aclr-'+m.id);
-  if(aclr) aclr.onclick=()=>clearResult(m.id);
+  if(aclr) aclr.onclick=async ()=>{
+    const hint=document.getElementById('admhint-'+m.id);
+    if(!await verifyPin('임준혁',myPin)){ if(hint){hint.className='hint err'; hint.textContent='관리자 인증 필요 🔒';} return; }
+    clearResult(m.id);
+  };
 }
 
 function renderAll(){
@@ -664,32 +722,45 @@ function renderAll(){
 }
 
 /* ============================================================
-   결과 자동 fetch (worldcup26.ir) — best-effort.
-   스키마가 확인되면 mapGame()만 조정하면 됩니다. 실패해도 무해.
+   결과 자동 fetch (worldcup26.ir) — best-effort, 1분 주기.
+   이 API는 팀을 ID로 주므로 (조A + matchday)로 경기를 매칭하고,
+   /get/teams 로 팀ID→국가를 매핑해 홈/원정 방향을 정렬한다.
+   실패/차단되면 seed·수동입력으로 동작하므로 무해.
    ============================================================ */
-function teamMatch(name, want){
-  if(!name) return false; name=(''+name).toLowerCase();
-  const dict={ 'kr':['korea','south korea','korea republic','대한민국','한국'],
-    'cz':['czech','czechia','체코'], 'mx':['mexico','멕시코'],
-    'za':['south africa','남아공','rsa'] };
-  return (dict[want]||[]).some(w=>name.includes(w));
-}
-function mapGame(g){
-  // 다양한 필드명을 방어적으로 수용
-  const home = g.home||g.home_team||g.team1||g.teamA||(g.teams&&g.teams.home)||{};
-  const away = g.away||g.away_team||g.team2||g.teamB||(g.teams&&g.teams.away)||{};
-  const hn = home.name||home.title||g.home_name||g.team1_name||home;
-  const an = away.name||away.title||g.away_name||g.team2_name||away;
-  const hs = g.home_score??g.score_home??(g.score&&g.score.home)??home.score??g.team1_score;
-  const as = g.away_score??g.score_away??(g.score&&g.score.away)??away.score??g.team2_score;
-  const st = (''+(g.status||g.state||g.match_status||'')).toLowerCase();
-  const final = /(ft|finished|ended|full|final|complete)/.test(st);
-  return { hn, an, hs, as, final };
+const TEAMS_API = 'https://worldcup26.ir/get/teams';
+let TEAMS_BY_ID = null;   // {id: name} 캐시
+
+const codeOfName = n => {
+  n=(''+n).toLowerCase();
+  if(/korea|대한민국|한국/.test(n)) return 'kr';
+  if(/czech|체코/.test(n)) return 'cz';
+  if(/mexico|멕시코/.test(n)) return 'mx';
+  if(/south africa|남아공|rsa/.test(n)) return 'za';
+  return '';
+};
+/* 득점자 필드 파싱: 'null'/빈값 → [], 그 외 콤마/구분자로 분리 */
+function parseScorers(v){
+  if(v==null) return [];
+  if(Array.isArray(v)) return v.map(x=>(''+(x&&x.name||x)).trim()).filter(Boolean);
+  const s=(''+v).trim();
+  if(!s || /^null$/i.test(s)) return [];
+  return s.split(/[,;،\n]/).map(x=>x.trim()).filter(Boolean);
 }
 function setAutoUpd(txt){
   const el=document.getElementById('autoUpd'); if(el) el.innerHTML=txt;
 }
 const hhmm=()=>new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+const sameResult=(c,h,a,f)=> c && +c.h===h && +c.a===a && !!c.final===!!f;
+
+async function ensureTeams(){
+  if(TEAMS_BY_ID) return TEAMS_BY_ID;
+  try{
+    const r=await fetch(TEAMS_API,{cache:'no-store'}); if(!r.ok) return null;
+    const d=await r.json(); const arr=Array.isArray(d)?d:(d.teams||d.data||[]);
+    const map={}; arr.forEach(t=>{ if(t&&t.id!=null) map[t.id]=t.name||t.title||t.country||''; });
+    TEAMS_BY_ID=map; return map;
+  }catch(e){ return null; }
+}
 
 async function fetchResults(){
   if(!RESULT_API) return;
@@ -698,27 +769,32 @@ async function fetchResults(){
     if(!res.ok){ setAutoUpd(`자동 갱신: 결과 소스 응답 없음 · <b>수동 입력</b>으로 대체 (${hhmm()})`); return; }
     let data=await res.json();
     const games=Array.isArray(data)?data:(data.games||data.data||data.matches||[]);
-    if(!Array.isArray(games)||!games.length){ setAutoUpd(`자동 갱신: 5분마다 확인 중 · 마지막 ${hhmm()}`); return; }
-    setAutoUpd(`경기 결과 자동 갱신 중 · 5분마다 · 마지막 <b>${hhmm()}</b>`);
+    if(!Array.isArray(games)||!games.length){ setAutoUpd(`자동 갱신: 1분마다 확인 중 · 마지막 ${hhmm()}`); return; }
+    const teams=await ensureTeams();
+    setAutoUpd(`경기 결과 자동 갱신 중 · 1분마다 · 마지막 <b>${hhmm()}</b>`);
     MATCHES.forEach(m=>{
-      const wantH = m.home.kr?'kr':(m.id==='mx-kr'?'mx':m.id==='kr-cz'?(m.home.name==='체코'?'cz':'kr'):'za');
-      // 팀 코드 결정
-      const codeOf = n => n==='대한민국'?'kr':n==='체코'?'cz':n==='멕시코'?'mx':'za';
-      const hc=codeOf(m.home.name), ac=codeOf(m.away.name);
-      for(const g of games){
-        const mg=mapGame(g);
-        const direct = teamMatch(mg.hn,hc)&&teamMatch(mg.an,ac);
-        const swap   = teamMatch(mg.hn,ac)&&teamMatch(mg.an,hc);
-        if((direct||swap) && mg.hs!=null && mg.as!=null){
-          let h=+mg.hs, a=+mg.as; if(swap){ const t=h;h=a;a=t; }
-          if(!isNaN(h)&&!isNaN(a)){
-            const cur=STATE.results[m.id];
-            // 수동 확정값은 건드리지 않음
-            if(!(cur && cur.final)) setResult(m.id,h,a,mg.final);
-          }
-          break;
-        }
+      // 조 + matchday 로 경기 매칭
+      const g=games.find(x=> String(x.group||x.group_name||'').toUpperCase()===m.wcGroup
+        && +(x.matchday||x.match_day||x.round)===m.wcMatchday );
+      if(!g) return;
+      const hs=g.home_score, as=g.away_score;
+      if(hs==null||as==null||hs===''||as==='') return;
+      let h=+hs, a=+as; if(isNaN(h)||isNaN(a)) return;
+      let hsc=parseScorers(g.home_scorers), asc=parseScorers(g.away_scorers);
+      // 방향 정렬: API home 팀이 우리 away면 스왑
+      const apiHomeName = teams ? teams[g.home_team_id] : '';
+      const apiHomeCode = codeOfName(apiHomeName);
+      const ourHomeCode = codeOfName(m.home.name);
+      if(apiHomeCode && ourHomeCode && apiHomeCode!==ourHomeCode){
+        [h,a]=[a,h]; [hsc,asc]=[asc,hsc];
       }
+      const finished = /^(true|1|ft|finished|ended|full|final)$/i.test(''+(g.finished||g.time_elapsed||''))
+        || g.finished===true;
+      const scorers=(hsc.length||asc.length)?{home:hsc,away:asc}:null;
+      const cur=STATE.results[m.id];
+      if(cur && cur.final) return;               // 관리자 수동 확정은 보존
+      if(sameResult(cur,h,a,finished) && !scorers) return; // 변화 없으면 쓰기 생략
+      setResult(m.id,h,a,finished,scorers);
     });
   }catch(e){ /* CORS/네트워크 실패 → seed·수동 입력으로 동작 */
     setAutoUpd(`자동 갱신 불가(차단/오류) · <b>결과는 수동 입력</b>으로 표시됩니다 (${hhmm()})`);
@@ -736,7 +812,7 @@ async function fetchResults(){
   });
   if(PARTICIPANTS.includes(myName)) nameSel.value=myName; else myName='';
   nameSel.addEventListener('change', e=>{
-    myName=e.target.value; localStorage.setItem(LS.name,myName); renderAll();
+    myName=e.target.value; localStorage.setItem(LS.name,myName); refreshAuth();
   });
 
   // 번호 뒷자리 (숫자만, 인증용)
@@ -744,7 +820,7 @@ async function fetchResults(){
   pinInput.value=myPin;
   pinInput.addEventListener('input', e=>{
     myPin=e.target.value.replace(/\D/g,'').slice(0,4); e.target.value=myPin;
-    localStorage.setItem(LS.pin,myPin);
+    localStorage.setItem(LS.pin,myPin); refreshAuth();
   });
 
   // 첫 미종료 경기를 기본 탭으로
@@ -752,9 +828,10 @@ async function fetchResults(){
   active = firstOpen>=0 ? firstOpen : 0;
 
   initBackend();
+  refreshAuth();   // 저장된 이름/핀으로 인증 상태 복원
   renderAll();
   fetchResults();
-  setInterval(fetchResults, 300000); // 5분마다 경기 결과 자동 갱신
+  setInterval(fetchResults, 60000);  // 1분마다 경기 결과 자동 갱신
   setInterval(renderAll, 60000);     // 잠금/카운트다운 갱신
 })();
 </script>
