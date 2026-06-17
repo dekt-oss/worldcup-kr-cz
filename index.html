@@ -260,10 +260,10 @@
   <div class="sec">
     <div class="sec-head"><h2>규칙</h2></div>
     <ul class="rules">
-      <li><span class="k">₩</span><span class="v">경기마다 <b>1인 1만원</b> × 5명 = 회차 상금 <b>5만원</b>.</span></li>
+      <li><span class="k">₩</span><span class="v">경기마다 <b>1인 1만원</b> × 6명 = 회차 상금 <b>6만원</b>.</span></li>
       <li><span class="k">①</span><span class="v">경기별 <b>정확한 스코어</b>를 맞힌 사람이 그 경기 상금을 가져갑니다.</span></li>
       <li><span class="k">②</span><span class="v">베팅은 <b>킥오프 전까지만</b> 입력·수정 가능 (이후 자동 잠금).</span></li>
-      <li><span class="k">③</span><span class="v">아무도 못 맞히면 상금 <b>5만원 그대로 다음 경기로 이월</b> (추가 입금 없이 예측만 · 누적 안 됨).</span></li>
+      <li><span class="k">③</span><span class="v">아무도 못 맞히면 상금 <b>6만원 그대로 다음 경기로 이월</b> (추가 입금 없이 예측만 · 누적 안 됨).</span></li>
       <li><span class="k">④</span><span class="v">두 명 이상 적중 시 상금 <b>균등 분배</b>.</span></li>
     </ul>
   </div>
@@ -309,7 +309,7 @@ const MATCHES = [
   { id:'kr-cz', no:'1차전', krHome:true, wcGroup:'A', wcMatchday:1, wcHomeId:3, wcAwayId:4,
     home:{flag:'🇰🇷',name:'대한민국',kr:true}, away:{flag:'🇨🇿',name:'체코',kr:false},
     koUTC:'2026-06-12T02:00:00Z', when:'6/12(금) 11:00', venue:'과달라하라 · Estadio Akron',
-    prize:50000, seed:{h:2,a:1,final:true,scorers:{home:['황인범','오현규'],away:['L. Krejčí']}},
+    prize:60000, seed:{h:2,a:1,final:true,scorers:{home:['황인범','오현규'],away:['L. Krejčí']}},
     seedBets:[
       {name:'정태원',h:1,a:2},
       {name:'임준혁',h:0,a:1},
@@ -320,11 +320,11 @@ const MATCHES = [
   { id:'mx-kr', no:'2차전', krHome:false, wcGroup:'A', wcMatchday:2, wcHomeId:1, wcAwayId:3,
     home:{flag:'🇲🇽',name:'멕시코',kr:false}, away:{flag:'🇰🇷',name:'대한민국',kr:true},
     koUTC:'2026-06-19T01:00:00Z', when:'6/19(금) 10:00', venue:'과달라하라 · Estadio Akron',
-    prize:50000, seed:null },
+    prize:60000, seed:null },
   { id:'za-kr', no:'3차전', krHome:false, wcGroup:'A', wcMatchday:3, wcHomeId:2, wcAwayId:3,
     home:{flag:'🇿🇦',name:'남아공',kr:false}, away:{flag:'🇰🇷',name:'대한민국',kr:true},
     koUTC:'2026-06-25T01:00:00Z', when:'6/25(목) 10:00', venue:'몬테레이 · Estadio BBVA',
-    prize:50000, seed:null },
+    prize:60000, seed:null },
 ];
 
 /* worldcup26.ir 자동 결과 fetch 대상 (무인증).  스키마가 달라도
@@ -346,7 +346,7 @@ let authed = false;   // 이름+뒷자리 인증 통과 여부
    참가자 + 번호 뒷자리 인증 (해시).  배팅 가능한 사람 = 1차전 참가자.
    PIN(휴대폰 뒷 4자리)은 평문 대신 SHA-256(salt:이름:PIN) 해시로 보관.
    ============================================================ */
-const PARTICIPANTS = ['정태원','임준혁','전민석','전호상','안준홍'];
+const PARTICIPANTS = ['정태원','임준혁','전민석','전호상','안준홍','김경목'];
 const PIN_SALT = 'wc26-kr';
 const PIN_HASH = {
   '정태원': 'd6eef7120f258e9373130dc0ae548ea2fb94526d0f0e4259c552271f6c850410',
@@ -354,6 +354,7 @@ const PIN_HASH = {
   '전민석': 'e7ba2361e1171fa2740ac1354cffb675b967322fd6619804148b0e6a00e39294',
   '전호상': 'af7c139628093611d69c3b258b716ae1c74a8f5c8be49e56f2e26b6d04ad3143',
   '안준홍': '86f62e5c7b47125845648fdd848f5e235f3c0eab8902247e714e05609113347e',
+  '김경목': '9b24ab2750a4bf70c7feffc922ca6e2b42224ca5fc01b9f7edda595fffa928fe',
 };
 async function sha256hex(s){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -483,7 +484,7 @@ function winnersOf(m){
   return Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
 }
 /* 이 경기가 '이월 판'인지 = 직전 경기가 적중자 없이 종료됐는지.
-   상금은 누적되지 않고 5만원 그대로 다음 경기로 넘어감(추가 입금 없음). */
+   상금은 누적되지 않고 6만원 그대로 다음 경기로 넘어감(추가 입금 없음). */
 function isCarry(m){
   const idx=MATCHES.indexOf(m); if(idx<=0) return false;
   const w=winnersOf(MATCHES[idx-1]);
@@ -582,7 +583,7 @@ function renderBoard(m){
     }</div>
     ${res&&res.final ? scorersHtml(m,res) : ''}`;
 
-  // prize + banner (상금 5만원 고정 — 이월돼도 누적 없이 그대로 다음 경기로)
+  // prize + banner (상금 6만원 고정 — 이월돼도 누적 없이 그대로 다음 경기로)
   const carry=isCarry(m);
   const prize=document.createElement('div'); prize.className='prize';
   prize.innerHTML=`<div class="amt">${fmt(m.prize)}원</div><div class="lbl">${carry?'🎁 이월된 상금 · 지난 경기에서 넘어옴(추가 입금 없음)':`참가비 1만원 × ${PARTICIPANTS.length}명 · 맞히면 독식`}</div>`;
@@ -641,7 +642,7 @@ function renderMyBet(m){
 }
 
 function renderBanner(m,res){
-  const prize=m.prize; // 상금 5만원 고정(이월돼도 누적 없음)
+  const prize=m.prize; // 상금 6만원 고정(이월돼도 누적 없음)
   const bets=betsOf(m);
   const total=Object.keys(bets).length;
   const winners=Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
@@ -654,7 +655,7 @@ function renderBanner(m,res){
       ? `<div class="b-top">WINNER</div><div class="b-main">🏆 ${names} 적중!</div><div class="b-sub">정답 ${res.h}:${res.a} · 상금 ${fmt(prize)}원 단독 획득</div>`
       : `<div class="b-top">WINNER</div><div class="b-main">🏆 공동 우승 · ${names}</div><div class="b-sub">정답 ${res.h}:${res.a} · ${fmt(prize)}원을 ${winners.length}명이 분배 (1인 ${fmt(per)}원)</div>`;
   }else{
-    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 상금 ${fmt(prize)}원이 ${next?esc(next.no)+'으로':'다음 경기로'} 그대로 이월 (추가 입금 없이 예측만, 5만원 유지)</div>`;
+    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 상금 ${fmt(prize)}원이 ${next?esc(next.no)+'으로':'다음 경기로'} 그대로 이월 (추가 입금 없이 예측만, 6만원 유지)</div>`;
   }
   return b;
 }
