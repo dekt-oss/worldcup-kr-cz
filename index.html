@@ -18,7 +18,7 @@
     --green:#56d27a;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html{-webkit-text-size-adjust:100%}
+  html{-webkit-text-size-adjust:100%;background:var(--bg0);overscroll-behavior-y:none}
   body{
     font-family:'Pretendard',system-ui,sans-serif;
     color:var(--cream);
@@ -159,7 +159,7 @@
 
   /* prize */
   .prize{margin-top:16px;display:flex;align-items:center;justify-content:center;gap:8px;border-top:1px dashed var(--line);padding-top:14px}
-  .prize .amt{font-family:'Anton',sans-serif;font-size:26px;color:var(--gold)}
+  .prize .amt{font-family:'Anton',sans-serif;font-size:24px;color:var(--gold);white-space:nowrap;flex:0 0 auto}
   .prize .lbl{font-size:12px;color:var(--muted);font-weight:600}
 
   /* predictions */
@@ -183,6 +183,9 @@
   .pred.win .p-verdict{color:var(--gold)}
   .pred.miss{opacity:.9}
   .pred.miss .p-verdict{color:#FF5C68}
+  .pred.pending{opacity:.5;border-style:dashed}
+  .pred.pending .p-score{color:var(--muted)}
+  .pred.pending .p-verdict{color:var(--muted)}
   .empty{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;padding:18px;border:1px dashed var(--line);border-radius:14px}
 
   /* banner */
@@ -564,7 +567,14 @@ function renderBoard(m){
   const res=resultOf(m);
   const wrap=document.createElement('div'); wrap.className='board';
 
-  const hS = res ? res.h : '–', aS = res ? res.a : '–';
+  // 킥오프 전에는 (자동값이 새어 들어와도) 점수·진행 표시 금지 → '경기 전'
+  const started = isLocked(m);
+  const showScore = res && (res.final || started);
+  const hS = showScore ? res.h : '–', aS = showScore ? res.a : '–';
+  let outCls, outTxt;
+  if(res && res.final){ outCls='final'; outTxt='최종 결과 · '+won(res.h,res.a,m); }
+  else if(started){ outCls=''; outTxt='진행중 · '+(res?won(res.h,res.a,m):'경기 중'); }
+  else { outCls='soon'; outTxt='⏳ 경기 전 · '+(dday(m)||'곧 시작'); }
   wrap.innerHTML = `
     <div class="meta"><b>${m.no}</b> · ${m.when} KST · ${esc(m.venue)}</div>
     <div class="matchup">
@@ -578,9 +588,7 @@ function renderBoard(m){
         <div class="badge">${m.away.kr?'KOREA':'AWAY'}</div>
       </div>
     </div>
-    <div class="outcome ${res&&res.final?'final':(res?'':'soon')}">${
-      res ? (res.final?'최종 결과 · ':'진행중 · ')+won(res.h,res.a,m) : '⏳ 경기 예정 · '+(dday(m)||'곧 시작')
-    }</div>
+    <div class="outcome ${outCls}">${outTxt}</div>
     ${res&&res.final ? scorersHtml(m,res) : ''}`;
 
   // prize + banner (상금 6만원 고정 — 이월돼도 누적 없이 그대로 다음 경기로)
@@ -672,33 +680,46 @@ function renderPredictions(m){
       <div class="empty">🔒 위에서 <b style="color:var(--gold)">이름과 번호 뒷 4자리</b>를 인증하면<br>${entries.length}명의 예측 현황이 공개됩니다</div>`;
     return sec;
   }
-  let cards;
-  if(entries.length===0){
-    cards=`<div class="empty">아직 베팅한 사람이 없습니다${isLocked(m)?'':' · 첫 베팅을 남겨보세요'}</div>`;
-  }else{
-    cards=entries.map(([k,p])=>{
-      let cls='', vtxt='', vsize='small';
-      if(res && res.final){
-        if(+p.h===res.h && +p.a===res.a){ cls='win'; vtxt='🎯<br>적중'; vsize='big'; }
-        else{ cls='miss'; vtxt='낙첨'; vsize='big'; }
-      }else{ vtxt = isLocked(m)?'결과<br>대기':'예측<br>완료'; }
-      const meTag = k===uk ? '<span class="me-tag">나</span>':'';
-      return `<div class="pred ${cls}">
-        <div class="p-left">
-          <div class="p-name">${esc(p.name||k)} ${meTag}</div>
-          <div class="p-score"><span class="${m.home.kr?'s-kr':'s-cz'}">${p.h}</span><span class="s-col">:</span><span class="${m.away.kr?'s-kr':'s-cz'}">${p.a}</span></div>
-          <div class="p-pick">${esc(won(p.h,p.a,m))} 예측</div>
-        </div>
-        <div class="p-verdict ${vsize}">${vtxt}</div>
-      </div>`;
-    }).join('');
-  }
+  const locked=isLocked(m);
+  // 입력한 사람 카드 (입력 시각순)
+  const doneCards = entries.map(([k,p])=>{
+    let cls='', vtxt='', vsize='small';
+    if(res && res.final){
+      if(+p.h===res.h && +p.a===res.a){ cls='win'; vtxt='🎯<br>적중'; vsize='big'; }
+      else{ cls='miss'; vtxt='낙첨'; vsize='big'; }
+    }else{ vtxt = locked?'결과<br>대기':'예측<br>완료'; }
+    const meTag = k===uk ? '<span class="me-tag">나</span>':'';
+    return `<div class="pred ${cls}">
+      <div class="p-left">
+        <div class="p-name">${esc(p.name||k)} ${meTag}</div>
+        <div class="p-score"><span class="${m.home.kr?'s-kr':'s-cz'}">${p.h}</span><span class="s-col">:</span><span class="${m.away.kr?'s-kr':'s-cz'}">${p.a}</span></div>
+        <div class="p-pick">${esc(won(p.h,p.a,m))} 예측</div>
+      </div>
+      <div class="p-verdict ${vsize}">${vtxt}</div>
+    </div>`;
+  }).join('');
+  // 아직 입력 안 한 참가자 → 미입력/입력 대기 카드
+  const missing = PARTICIPANTS.filter(n=>!bets[keyOf(n)]);
+  const pendingCards = missing.map(n=>{
+    const meTag = keyOf(n)===uk ? '<span class="me-tag">나</span>':'';
+    const lbl = locked?'미입력':'입력 대기';
+    return `<div class="pred pending">
+      <div class="p-left">
+        <div class="p-name">${esc(n)} ${meTag}</div>
+        <div class="p-score">–<span class="s-col">:</span>–</div>
+        <div class="p-pick">${lbl}</div>
+      </div>
+      <div class="p-verdict small">${lbl}</div>
+    </div>`;
+  }).join('');
+  const cards = doneCards + pendingCards;
   let summary='';
   if(res && res.final){
     const wc=entries.filter(([k,p])=>+p.h===res.h && +p.a===res.a).length;
     summary = wc>0 ? ` · 🎯 적중 ${wc}명` : (entries.length?' · 적중자 없음':'');
   }
-  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">${entries.length}명 참여${isLocked(m)?' · 마감':''}${summary}</div></div><div class="grid">${cards}</div>`;
+  const waitTxt = missing.length ? ` · ${locked?'미입력':'대기'} ${missing.length}명` : '';
+  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">입력 ${entries.length}/${PARTICIPANTS.length}명${waitTxt}${locked?' · 마감':''}${summary}</div></div><div class="grid">${cards}</div>`;
   return sec;
 }
 
