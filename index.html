@@ -912,9 +912,19 @@ async function fetchResults(){
     localStorage.setItem(LS.pin,myPin); refreshAuth();
   });
 
-  // 첫 미종료 경기를 기본 탭으로
-  const firstOpen = MATCHES.findIndex(m=>{ const r=resultOf(m); return !(r&&r.final); });
-  active = firstOpen>=0 ? firstOpen : 0;
+  // 기본 탭 = 지금 시점에 가장 가까운 경기.
+  // 1) 미종료 경기 중 아직 시작 전(킥오프 미래)이면 가장 임박한 것,
+  // 2) 모두 시작했으면 가장 최근(마지막) 미종료 경기.
+  // (지난 경기 결과가 미확정이어도 다음/현재 경기로 포커스되도록)
+  const nowMs = Date.now();
+  const open = MATCHES.map((m,i)=>({m,i})).filter(({m})=>{ const r=resultOf(m); return !(r&&r.final); });
+  let pick = -1;
+  if(open.length){
+    const upcoming = open.filter(({m})=>new Date(m.koUTC).getTime()>nowMs)
+                         .sort((a,b)=>new Date(a.m.koUTC)-new Date(b.m.koUTC));
+    pick = upcoming.length ? upcoming[0].i : open[open.length-1].i;
+  }
+  active = pick>=0 ? pick : MATCHES.length-1;
 
   initBackend();
   refreshAuth();   // 저장된 이름/핀으로 인증 상태 복원
