@@ -167,7 +167,7 @@
   .sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
   .sec-head h2{font-size:15px;font-weight:800}
   .sec-head .count{font-size:12px;color:var(--muted);font-weight:600}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .pred{border:1px solid var(--line);border-radius:16px;padding:14px;background:linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0));
     display:flex;align-items:center;justify-content:space-between;gap:12px}
   .pred .p-left{min-width:0;flex:1}
@@ -181,6 +181,7 @@
   .pred .p-verdict.small{font-size:12px;font-weight:700}
   .pred .p-verdict.prob{font-size:18px;font-weight:900;color:var(--gold)}
   .prob-note{grid-column:1/-1;margin-top:10px;font-size:11px;color:var(--muted);text-align:center;line-height:1.5}
+  .prob-top{font-size:12px;font-weight:700;color:var(--gold);margin:-4px 0 12px;display:flex;align-items:center;gap:6px}
   .pred.win{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold), 0 0 30px -12px var(--gold-soft)}
   .pred.win .p-verdict{color:var(--gold)}
   .pred.miss{opacity:.9}
@@ -231,7 +232,12 @@
 
   @media (max-width:380px){
     .tile{width:54px;height:74px;font-size:44px}
-    .grid{grid-template-columns:1fr}
+    /* 좁은 안드로이드 화면에서도 2열 유지 — 여백·폰트만 축소 */
+    .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .pred{padding:11px}
+    .pred .p-score{font-size:26px}
+    .pred .p-verdict.prob{font-size:16px}
+    .pred .p-name{font-size:13px}
     .tab{padding:9px 5px}
     .tab .t-team{font-size:13px}
   }
@@ -821,7 +827,10 @@ function renderPredictions(m){
     const eg=expectedGoals(m);
     note=`<div class="prob-note">※ 북메이커 배당(${esc(m.away.name)} 승 ${m.odds.away} · 무 ${m.odds.draw} · ${esc(m.home.name)} 승 ${m.odds.home})을 포아송 모델로 환산한 <b>예상 스코어 확률</b> (높은 순 정렬)<br>예상 기대득점 ${esc(m.home.name)} ${eg.lh.toFixed(2)} : ${eg.la.toFixed(2)} ${esc(m.away.name)}</div>`;
   }
-  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">입력 ${entries.length}/${PARTICIPANTS.length}명${waitTxt}${locked?' · 마감':''}${probTxt}${summary}</div></div><div class="grid">${cards}</div>${note}`;
+  const topComment = showProb
+    ? `<div class="prob-top">${live?`🔴 현재 스코어 ${ch}:${ca} 기준 적중 확률 · 높은 순`:'📊 배당 기반 예상 적중 확률 · 높은 순'}</div>`
+    : '';
+  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">입력 ${entries.length}/${PARTICIPANTS.length}명${waitTxt}${locked?' · 마감':''}${probTxt}${summary}</div></div>${topComment}<div class="grid">${cards}</div>${note}`;
   return sec;
 }
 
