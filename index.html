@@ -179,6 +179,8 @@
   .pred .p-verdict{flex:0 0 auto;text-align:center;font-weight:900;letter-spacing:.02em;line-height:1.15;color:var(--muted)}
   .pred .p-verdict.big{font-size:24px}
   .pred .p-verdict.small{font-size:12px;font-weight:700}
+  .pred .p-verdict.prob{font-size:18px;font-weight:900;color:var(--gold)}
+  .prob-note{grid-column:1/-1;margin-top:10px;font-size:11px;color:var(--muted);text-align:center;line-height:1.5}
   .pred.win{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold), 0 0 30px -12px var(--gold-soft)}
   .pred.win .p-verdict{color:var(--gold)}
   .pred.miss{opacity:.9}
@@ -263,10 +265,10 @@
   <div class="sec">
     <div class="sec-head"><h2>규칙</h2></div>
     <ul class="rules">
-      <li><span class="k">₩</span><span class="v">경기마다 <b>1인 1만원</b> × 7명 = 회차 상금 <b>7만원</b>.</span></li>
+      <li><span class="k">₩</span><span class="v">경기마다 <b>1인 1만원</b> · 그 경기에 <b>스코어를 입력한 인원</b>만큼 상금 (예: 7명 입력 → 7만원, 미입력자는 미참여로 차감).</span></li>
       <li><span class="k">①</span><span class="v">경기별 <b>정확한 스코어</b>를 맞힌 사람이 그 경기 상금을 가져갑니다.</span></li>
       <li><span class="k">②</span><span class="v">베팅은 <b>킥오프 전까지만</b> 입력·수정 가능 (이후 자동 잠금).</span></li>
-      <li><span class="k">③</span><span class="v">아무도 못 맞히면 상금 <b>7만원 그대로 다음 경기로 이월</b> (추가 입금 없이 예측만 · 누적 안 됨).</span></li>
+      <li><span class="k">③</span><span class="v">아무도 못 맞히면 그 상금 <b>그대로 다음 경기로 이월</b> (추가 입금 없이 예측만 · 누적 안 됨).</span></li>
       <li><span class="k">④</span><span class="v">두 명 이상 적중 시 상금 <b>균등 분배</b>.</span></li>
     </ul>
   </div>
@@ -446,9 +448,10 @@ function deleteBet(matchId){
     localStorage.setItem(LS.bets, JSON.stringify(STATE.bets)); renderAll();
   }
 }
-function setResult(matchId, h, a, final, scorers, source){
+function setResult(matchId, h, a, final, scorers, source, min){
   const rec = { h, a, final:!!final, ts:Date.now(), source:source||'manual' };
   if(scorers) rec.scorers = scorers;   // {home:[],away:[]} (자동 fetch 시)
+  if(min!=null) rec.min = min;         // 진행중 경과 분(확률 계산용)
   if(db){ db.ref('results/'+matchId).set(rec); }
   else{ STATE.results[matchId]=rec; localStorage.setItem(LS.results, JSON.stringify(STATE.results)); renderAll(); }
 }
@@ -467,7 +470,7 @@ function resultOf(m){
   // 2) 시드 확정(공식 결과)은 불안정한 자동값보다 우선 — 1차전 2:1 보호
   if(m.seed && m.seed.final) return { h:m.seed.h, a:m.seed.a, final:true, scorers:seedScorers };
   // 3) 자동 fetch 결과
-  if(has) return { h:+r.h, a:+r.a, final:!!r.final, scorers:(r.scorers||seedScorers) };
+  if(has) return { h:+r.h, a:+r.a, final:!!r.final, scorers:(r.scorers||seedScorers), min:(r.min!=null?+r.min:null) };
   // 4) 시드(미확정)
   if(m.seed) return { h:m.seed.h, a:m.seed.a, final:!!m.seed.final, scorers:seedScorers };
   return null;
@@ -514,6 +517,42 @@ const won = (h,a,m)=>{ // 결과 텍스트 (한국 관점 표기)
   return '무승부';
 };
 const fmt = n => Number(n).toLocaleString('ko-KR');
+
+/* ============================================================
+   상금 팟 — 마감 후엔 '실제 베팅한 인원'만 참가비를 낸 것으로 계산.
+   (마감 전에는 전체 참가자 기준으로 예상 팟을 보여준다)
+   이월 판은 직전 경기 팟이 그대로 넘어옴(추가 입금 없음).
+   ============================================================ */
+const BET_UNIT = 10000;                       // 1인 참가비
+const bettorsOf = m => Object.keys(betsOf(m)).length;   // 실제 베팅 인원(시드 포함)
+const headOf = m => isLocked(m) ? bettorsOf(m) : PARTICIPANTS.length;
+function potOf(m){ return headOf(m) * BET_UNIT; }
+function effectivePot(m){
+  if(isCarry(m)){ const i=MATCHES.indexOf(m); return i>0 ? effectivePot(MATCHES[i-1]) : potOf(m); }
+  return potOf(m);
+}
+
+/* ============================================================
+   진행중 확률 — 현재 스코어·남은 시간 기준, 각 베팅이 '최종 스코어'가 될
+   근사 확률. 팀별 남은 득점을 포아송(평균 1.35골/경기 가정)으로 모델링.
+   ============================================================ */
+function poissonPmf(k, mu){
+  if(mu<=0) return k===0 ? 1 : 0;
+  let p=Math.exp(-mu); for(let i=1;i<=k;i++) p*=mu/i; return p;
+}
+function scoreProb(bh, ba, ch, ca, minEl){
+  const dh=bh-ch, da=ba-ca;
+  if(dh<0 || da<0) return 0;                  // 현재 스코어를 이미 넘어섬 → 불가능
+  const rem=Math.max(0,(90-(minEl||0)))/90;   // 남은 시간 비율(추가시간 무시)
+  const mu=1.35*rem;                          // 팀당 남은 기대 득점
+  return poissonPmf(dh,mu)*poissonPmf(da,mu);
+}
+function pctText(p){
+  const v=p*100;
+  if(v>=10) return Math.round(v)+'%';
+  if(v>=0.1) return v.toFixed(1)+'%';
+  return v>0 ? '<0.1%' : '0%';
+}
 
 /* 양팀 득점 표시 — 득점자 이름을 알면 이름, 모르면 'N골'.
    득점이 0인 팀은 생략. */
@@ -594,8 +633,12 @@ function renderBoard(m){
 
   // prize + banner (상금 7만원 고정 — 이월돼도 누적 없이 그대로 다음 경기로)
   const carry=isCarry(m);
+  const pot=effectivePot(m);
   const prize=document.createElement('div'); prize.className='prize';
-  prize.innerHTML=`<div class="amt">${fmt(m.prize)}원</div><div class="lbl">${carry?'🎁 이월된 상금 · 지난 경기에서 넘어옴(추가 입금 없음)':`참가비 1만원 × ${PARTICIPANTS.length}명 · 맞히면 독식`}</div>`;
+  const lbl = carry
+    ? '🎁 이월된 상금 · 지난 경기에서 넘어옴(추가 입금 없음)'
+    : `참가비 1만원 × ${headOf(m)}명${isLocked(m)?' (실제 참여)':''} · 맞히면 독식`;
+  prize.innerHTML=`<div class="amt">${fmt(pot)}원</div><div class="lbl">${lbl}</div>`;
   wrap.appendChild(prize);
 
   if(res && res.final) wrap.appendChild(renderBanner(m,res));
@@ -651,7 +694,7 @@ function renderMyBet(m){
 }
 
 function renderBanner(m,res){
-  const prize=m.prize; // 상금 7만원 고정(이월돼도 누적 없음)
+  const prize=effectivePot(m); // 실제 베팅 인원 기준 팟(이월돼도 누적 없음)
   const bets=betsOf(m);
   const total=Object.keys(bets).length;
   const winners=Object.values(bets).filter(b=>+b.h===res.h && +b.a===res.a);
@@ -664,7 +707,7 @@ function renderBanner(m,res){
       ? `<div class="b-top">WINNER</div><div class="b-main">🏆 ${names} 적중!</div><div class="b-sub">정답 ${res.h}:${res.a} · 상금 ${fmt(prize)}원 단독 획득</div>`
       : `<div class="b-top">WINNER</div><div class="b-main">🏆 공동 우승 · ${names}</div><div class="b-sub">정답 ${res.h}:${res.a} · ${fmt(prize)}원을 ${winners.length}명이 분배 (1인 ${fmt(per)}원)</div>`;
   }else{
-    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 상금 ${fmt(prize)}원이 ${next?esc(next.no)+'으로':'다음 경기로'} 그대로 이월 (추가 입금 없이 예측만, 7만원 유지)</div>`;
+    b.innerHTML = `<div class="b-top">이월 · CARRY OVER</div><div class="b-main">🙅 적중자 없음${total?` · ${total}명 전원 미적중`:''}</div><div class="b-sub">정답 ${res.h}:${res.a} — 아무도 못 맞혀 상금 ${fmt(prize)}원이 ${next?esc(next.no)+'으로':'다음 경기로'} 그대로 이월 (추가 입금 없이 예측만, ${fmt(prize)}원 유지)</div>`;
   }
   return b;
 }
@@ -682,19 +725,27 @@ function renderPredictions(m){
     return sec;
   }
   const locked=isLocked(m);
+  // 진행중(현재 스코어 있음, 미확정) → 베팅별 확률 계산
+  const live = !!(res && !res.final && locked);
+  const ch = live?res.h:null, ca = live?res.a:null;
+  const minEl = live ? (res.min!=null?res.min:45) : null;   // 분 모르면 중반(45) 가정
   // 입력한 사람 카드 (입력 시각순)
   const doneCards = entries.map(([k,p])=>{
     let cls='', vtxt='', vsize='small';
     if(res && res.final){
       if(+p.h===res.h && +p.a===res.a){ cls='win'; vtxt='🎯<br>적중'; vsize='big'; }
       else{ cls='miss'; vtxt='낙첨'; vsize='big'; }
+    }else if(live){
+      const pr=scoreProb(+p.h,+p.a,ch,ca,minEl);
+      if(pr<=0){ cls='miss'; vtxt='불가'; vsize='small'; }
+      else{ vtxt=pctText(pr); vsize='prob'; }
     }else{ vtxt = locked?'결과<br>대기':'예측<br>완료'; }
     const meTag = k===uk ? '<span class="me-tag">나</span>':'';
     return `<div class="pred ${cls}">
       <div class="p-left">
         <div class="p-name">${esc(p.name||k)} ${meTag}</div>
         <div class="p-score"><span class="${m.home.kr?'s-kr':'s-cz'}">${p.h}</span><span class="s-col">:</span><span class="${m.away.kr?'s-kr':'s-cz'}">${p.a}</span></div>
-        <div class="p-pick">${esc(won(p.h,p.a,m))} 예측</div>
+        <div class="p-pick">${live?'적중 확률':esc(won(p.h,p.a,m))+' 예측'}</div>
       </div>
       <div class="p-verdict ${vsize}">${vtxt}</div>
     </div>`;
@@ -720,7 +771,9 @@ function renderPredictions(m){
     summary = wc>0 ? ` · 🎯 적중 ${wc}명` : (entries.length?' · 적중자 없음':'');
   }
   const waitTxt = missing.length ? ` · ${locked?'미입력':'대기'} ${missing.length}명` : '';
-  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">입력 ${entries.length}/${PARTICIPANTS.length}명${waitTxt}${locked?' · 마감':''}${summary}</div></div><div class="grid">${cards}</div>`;
+  const liveTxt = live ? ` · <span style="color:#FF8b94">🔴 LIVE ${ch}:${ca} 기준</span>` : '';
+  const note = live ? `<div class="prob-note">※ 현재 스코어·남은 시간(약 ${minEl}분 경과)·평균 득점 기반 <b>근사 확률</b>입니다</div>` : '';
+  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">입력 ${entries.length}/${PARTICIPANTS.length}명${waitTxt}${locked?' · 마감':''}${liveTxt}${summary}</div></div><div class="grid">${cards}</div>${note}`;
   return sec;
 }
 
@@ -807,6 +860,15 @@ function parseScorers(v){
     .map(x=>x.trim().replace(/^[\s"“”„]+|[\s"“”„]+$/g,'').trim())
     .filter(Boolean);
 }
+/* 경과 분 파싱: "67'", 67, "HT", "FT" 등 → 숫자 분(없으면 null) */
+function parseMinute(v){
+  if(v==null) return null;
+  const s=(''+v).toLowerCase().trim();
+  if(!s || /^(null|undefined)$/.test(s)) return null;
+  if(/ht|half|하프/.test(s)) return 45;
+  if(/ft|full|ended|final|finished|종료/.test(s)) return 90;
+  const mm=s.match(/\d+/); return mm? Math.min(120,+mm[0]) : null;
+}
 function setAutoUpd(txt){
   const el=document.getElementById('autoUpd'); if(el) el.innerHTML=txt;
 }
@@ -879,10 +941,13 @@ async function fetchResults(){
       const finished = /^(true|1|ft|finished|ended|full|final)$/i.test(''+(g.finished||g.time_elapsed||''))
         || g.finished===true;
       const scorers=(hsc.length||asc.length)?{home:hsc,away:asc}:null;
+      const minEl=finished?90:parseMinute(g.time_elapsed!=null?g.time_elapsed:g.minute); // 진행중 경과 분
       const cur=STATE.results[m.id];
       if(cur && cur.source==='manual') return;   // 관리자 수동값은 보존
-      if(sameResult(cur,h,a,finished) && !scorers) return; // 변화 없으면 쓰기 생략
-      setResult(m.id,h,a,finished,scorers,'auto');
+      // 변화 없으면 쓰기 생략 — 단 진행중엔 경과 분이 바뀌면 갱신(확률 최신화)
+      const minChanged = !finished && minEl!=null && (cur?+cur.min:null)!==minEl;
+      if(sameResult(cur,h,a,finished) && !scorers && !minChanged) return;
+      setResult(m.id,h,a,finished,scorers,'auto',minEl);
     });
   }catch(e){ /* CORS/네트워크 실패 → seed·수동 입력으로 동작 */
     setAutoUpd(`자동 갱신 불가(차단/오류) · <b>결과는 수동 입력</b>으로 표시됩니다 (${hhmm()})`);
