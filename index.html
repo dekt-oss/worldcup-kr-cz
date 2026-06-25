@@ -329,7 +329,9 @@ const MATCHES = [
   { id:'za-kr', no:'3차전', krHome:false, wcGroup:'A', wcMatchday:3, wcHomeId:2, wcAwayId:3,
     home:{flag:'🇿🇦',name:'남아공',kr:false}, away:{flag:'🇰🇷',name:'대한민국',kr:true},
     koUTC:'2026-06-25T01:00:00Z', when:'6/25(목) 10:00', venue:'몬테레이 · Estadio BBVA',
-    prize:70000, seed:null },
+    prize:70000, seed:null,
+    // 북메이커 배당(소수) — home=남아공 승, draw=무, away=한국 승. 확률 모델 보정에 사용.
+    odds:{home:5.4, draw:3.6, away:1.54} },
 ];
 
 /* worldcup26.ir 자동 결과 fetch 대상 (무인증).  스키마가 달라도
@@ -533,19 +535,52 @@ function effectivePot(m){
 }
 
 /* ============================================================
-   진행중 확률 — 현재 스코어·남은 시간 기준, 각 베팅이 '최종 스코어'가 될
-   근사 확률. 팀별 남은 득점을 포아송(평균 1.35골/경기 가정)으로 모델링.
+   확률 모델 — 축구 스코어 예측의 표준인 '포아송' 모델을 북메이커 배당에
+   캘리브레이션. 1X2 배당으로 각 팀 기대득점(λ_home, λ_away)을 역산한 뒤,
+   각 베팅이 '최종 스코어'가 될 확률 = P(home 추가골)·P(away 추가골).
+   배당이 없는 경기는 평균 1.35골/팀으로 대체.
    ============================================================ */
 function poissonPmf(k, mu){
   if(mu<=0) return k===0 ? 1 : 0;
   let p=Math.exp(-mu); for(let i=1;i<=k;i++) p*=mu/i; return p;
 }
-function scoreProb(bh, ba, ch, ca, minEl){
+// 배당(소수) → 마진 제거한 1X2 내재확률
+function impliedProbs(odds){
+  const r=[1/odds.home,1/odds.draw,1/odds.away], s=r[0]+r[1]+r[2];
+  return {home:r[0]/s, draw:r[1]/s, away:r[2]/s};
+}
+// 독립 포아송 λ쌍 → 홈승/무/원정승 확률(최대 max골까지 합산)
+function outcomeProbs(lh, la, max){
+  const ph=[], pa=[];
+  for(let k=0;k<=max;k++){ ph.push(poissonPmf(k,lh)); pa.push(poissonPmf(k,la)); }
+  let H=0,D=0,A=0;
+  for(let i=0;i<=max;i++)for(let j=0;j<=max;j++){ const p=ph[i]*pa[j]; if(i>j)H+=p; else if(i===j)D+=p; else A+=p; }
+  return {home:H, draw:D, away:A};
+}
+const _egCache={};
+// 1X2 배당에 가장 잘 맞는 (λ_home, λ_away) 탐색
+function fitGoals(odds){
+  const key=odds.home+'/'+odds.draw+'/'+odds.away;
+  if(_egCache[key]) return _egCache[key];
+  const t=impliedProbs(odds); let best=null;
+  for(let lh=0.15; lh<=3.6; lh+=0.05){
+    for(let la=0.15; la<=3.6; la+=0.05){
+      const o=outcomeProbs(lh,la,8);
+      const e=(o.home-t.home)**2+(o.draw-t.draw)**2+(o.away-t.away)**2;
+      if(!best || e<best.e) best={lh,la,e};
+    }
+  }
+  return _egCache[key]={lh:best.lh, la:best.la};
+}
+// 경기별 팀 기대득점(전반전 90분 기준)
+function expectedGoals(m){ return m.odds ? fitGoals(m.odds) : {lh:1.35, la:1.35}; }
+// 베팅 (bh:ba)이 최종 스코어가 될 확률 — 현재 (ch:ca), 경과 minEl분 기준
+function scoreProb(m, bh, ba, ch, ca, minEl){
   const dh=bh-ch, da=ba-ca;
   if(dh<0 || da<0) return 0;                  // 현재 스코어를 이미 넘어섬 → 불가능
   const rem=Math.max(0,(90-(minEl||0)))/90;   // 남은 시간 비율(추가시간 무시)
-  const mu=1.35*rem;                          // 팀당 남은 기대 득점
-  return poissonPmf(dh,mu)*poissonPmf(da,mu);
+  const {lh,la}=expectedGoals(m);
+  return poissonPmf(dh, lh*rem) * poissonPmf(da, la*rem);
 }
 function pctText(p){
   const v=p*100;
@@ -725,27 +760,34 @@ function renderPredictions(m){
     return sec;
   }
   const locked=isLocked(m);
-  // 진행중(현재 스코어 있음, 미확정) → 베팅별 확률 계산
+  // 확률 표시 조건:
+  //  live    = 진행중(킥오프 후·미확정·현재 스코어 수신) → 현재 스코어 기준
+  //  preMatch= 킥오프 전 + 배당 보유 → 배당 기반 예상 스코어 확률
   const live = !!(res && !res.final && locked);
-  const ch = live?res.h:null, ca = live?res.a:null;
-  const minEl = live ? (res.min!=null?res.min:45) : null;   // 분 모르면 중반(45) 가정
-  // 입력한 사람 카드 (입력 시각순)
-  const doneCards = entries.map(([k,p])=>{
+  const preMatch = !locked && !!m.odds && !(res&&res.final);
+  const showProb = live || preMatch;
+  const ch = live ? res.h : 0, ca = live ? res.a : 0;
+  const minEl = live ? (res.min!=null?res.min:45) : 0;   // preMatch는 0분(풀타임 기준)
+  // 입력한 사람 카드 — 확률 표시 중이면 확률 내림차순, 아니면 입력 시각순
+  const ranked = entries.map(([k,p])=>({
+    k, p, prob: showProb ? scoreProb(m,+p.h,+p.a,ch,ca,minEl) : null
+  }));
+  if(showProb) ranked.sort((x,y)=>y.prob-x.prob);
+  const doneCards = ranked.map(({k,p,prob})=>{
     let cls='', vtxt='', vsize='small';
     if(res && res.final){
       if(+p.h===res.h && +p.a===res.a){ cls='win'; vtxt='🎯<br>적중'; vsize='big'; }
       else{ cls='miss'; vtxt='낙첨'; vsize='big'; }
-    }else if(live){
-      const pr=scoreProb(+p.h,+p.a,ch,ca,minEl);
-      if(pr<=0){ cls='miss'; vtxt='불가'; vsize='small'; }
-      else{ vtxt=pctText(pr); vsize='prob'; }
+    }else if(showProb){
+      if(prob<=0){ cls='miss'; vtxt='불가'; vsize='small'; }
+      else{ vtxt=pctText(prob); vsize='prob'; }
     }else{ vtxt = locked?'결과<br>대기':'예측<br>완료'; }
     const meTag = k===uk ? '<span class="me-tag">나</span>':'';
     return `<div class="pred ${cls}">
       <div class="p-left">
         <div class="p-name">${esc(p.name||k)} ${meTag}</div>
         <div class="p-score"><span class="${m.home.kr?'s-kr':'s-cz'}">${p.h}</span><span class="s-col">:</span><span class="${m.away.kr?'s-kr':'s-cz'}">${p.a}</span></div>
-        <div class="p-pick">${live?'적중 확률':esc(won(p.h,p.a,m))+' 예측'}</div>
+        <div class="p-pick">${showProb?'적중 확률':esc(won(p.h,p.a,m))+' 예측'}</div>
       </div>
       <div class="p-verdict ${vsize}">${vtxt}</div>
     </div>`;
@@ -771,9 +813,15 @@ function renderPredictions(m){
     summary = wc>0 ? ` · 🎯 적중 ${wc}명` : (entries.length?' · 적중자 없음':'');
   }
   const waitTxt = missing.length ? ` · ${locked?'미입력':'대기'} ${missing.length}명` : '';
-  const liveTxt = live ? ` · <span style="color:#FF8b94">🔴 LIVE ${ch}:${ca} 기준</span>` : '';
-  const note = live ? `<div class="prob-note">※ 현재 스코어·남은 시간(약 ${minEl}분 경과)·평균 득점 기반 <b>근사 확률</b>입니다</div>` : '';
-  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">입력 ${entries.length}/${PARTICIPANTS.length}명${waitTxt}${locked?' · 마감':''}${liveTxt}${summary}</div></div><div class="grid">${cards}</div>${note}`;
+  const probTxt = live ? ` · <span style="color:#FF8b94">🔴 LIVE ${ch}:${ca} 기준</span>`
+                       : (preMatch ? ` · <span style="color:var(--gold)">📊 배당 기반 예상</span>` : '');
+  let note='';
+  if(live) note=`<div class="prob-note">※ 현재 스코어·남은 시간(약 ${minEl}분 경과)·배당 기반 <b>적중 확률</b> (높은 순 정렬)</div>`;
+  else if(preMatch){
+    const eg=expectedGoals(m);
+    note=`<div class="prob-note">※ 북메이커 배당(${esc(m.away.name)} 승 ${m.odds.away} · 무 ${m.odds.draw} · ${esc(m.home.name)} 승 ${m.odds.home})을 포아송 모델로 환산한 <b>예상 스코어 확률</b> (높은 순 정렬)<br>예상 기대득점 ${esc(m.home.name)} ${eg.lh.toFixed(2)} : ${eg.la.toFixed(2)} ${esc(m.away.name)}</div>`;
+  }
+  sec.innerHTML = `<div class="sec-head"><h2>예측 현황</h2><div class="count">입력 ${entries.length}/${PARTICIPANTS.length}명${waitTxt}${locked?' · 마감':''}${probTxt}${summary}</div></div><div class="grid">${cards}</div>${note}`;
   return sec;
 }
 
